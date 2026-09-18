@@ -43,6 +43,25 @@ function replaceInFile(filePath: string, replacements: Record<string, string>) {
 function writeCursorRules(dest: string, name: string) {
   const rulesDir = path.join(dest, ".cursor", "rules");
   fs.mkdirSync(rulesDir, { recursive: true });
+
+  const blueprintRules = `# ${name} — NetApp Blueprint only
+
+You are building a NetApp UX prototype with **@netapp/blueprint@legacy** (already in blueprint-app/node_modules).
+
+## Hard rules
+- Use **only** Blueprint React components (\`BpButton\`, \`BpAppShell\`, \`BpHeader\`, \`BpStack\`, \`BpText\`, \`BpCard\`, etc. from \`@netapp/blueprint\`).
+- Do **not** invent custom CSS UI, shadcn, MUI, plain HTML forms, or generic Tailwind component kits.
+- Do **not** replace the Blueprint layout shell unless the user explicitly asks.
+- Keep hash routes (e.g. \`#/home\`) for deep links.
+
+## Before writing UI
+1. Read \`blueprint-app/node_modules/@netapp/blueprint/dist/agent/docs/ai-layout-guidance.md\`
+2. Prefer Blueprint tokens, icons, and patterns from that package
+3. Implement in \`blueprint-app/src\` with React + TypeScript
+
+When the user describes a screen, implement it immediately with Blueprint components.
+`;
+
   fs.writeFileSync(
     path.join(rulesDir, "blueprint-prototype.mdc"),
     `---
@@ -51,27 +70,17 @@ globs:
 alwaysApply: true
 ---
 
-# ${name}
-
-You are building a NetApp UX prototype using @netapp/blueprint@legacy.
-
-Before writing UI:
-1. Read node_modules/@netapp/blueprint/dist/agent/docs/ai-layout-guidance.md
-2. Use Blueprint MCP at https://ux.netapp.com/blueprint/mcp for components and props
-3. Use Blueprint tokens, icons, and components - do not invent new assets when Blueprint has one
-4. Keep hash routes (e.g. #/home) so Proto Hub can deep-link reviewers to screens
-
-When the user describes what to build, implement it immediately in blueprint-app/src using React + TypeScript.
+${blueprintRules}
 `,
   );
 
+  // Claude Code reads CLAUDE.md; Cursor also picks up AGENTS.md
+  fs.writeFileSync(path.join(dest, "CLAUDE.md"), blueprintRules);
   fs.writeFileSync(
     path.join(dest, "AGENTS.md"),
-    `# ${name}
+    `${blueprintRules}
 
-Blueprint is already installed. Start prompting - describe what you want to build.
-
-Starter prompt is in CURSOR_PROMPT.md if you need it.
+Starter prompt: see CURSOR_PROMPT.md
 `,
   );
 }
@@ -200,14 +209,18 @@ export function openInEditor(folderPath: string, editor: EditorChoice): boolean 
     }
 
     if (process.platform === "darwin") {
-      execSync(`open -a Claude "${folderPath}"`, { stdio: "pipe" });
-      return true;
-    }
-    try {
-      execSync(`claude`, { cwd: folderPath, stdio: "pipe" });
-      return true;
-    } catch {
-      return false;
+      // Open this project folder in Claude Code / Claude app
+      try {
+        execSync(`open -a "Claude" "${folderPath}"`, { stdio: "pipe" });
+        return true;
+      } catch {
+        try {
+          execSync(`claude "${folderPath}"`, { cwd: folderPath, stdio: "pipe" });
+          return true;
+        } catch {
+          return false;
+        }
+      }
     }
   } catch {
     return false;
