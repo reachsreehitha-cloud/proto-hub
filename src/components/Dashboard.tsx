@@ -12,33 +12,38 @@ type View = "team" | "my-drafts" | "my-published";
 const VIEW_META: Record<View, { label: string; description: string }> = {
   team: {
     label: "Team gallery",
-    description: "Published prototypes from everyone on the team.",
+    description:
+      "Published prototypes from the shared team registry (GitHub) plus yours. Open or copy any live link.",
   },
   "my-drafts": {
     label: "My drafts",
-    description: "Your unpublished work - only you see these until you publish.",
+    description: "Your unpublished work - only on this Mac until you publish.",
   },
   "my-published": {
     label: "My published",
-    description: "Prototypes you've shared with the team.",
+    description: "Prototypes you published from this Mac. Push team-registry.json so others see them too.",
   },
 };
 
 export function Dashboard() {
   const [prototypes, setPrototypes] = useState<Prototype[]>([]);
+  const [teamGallery, setTeamGallery] = useState<Prototype[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [view, setView] = useState<View>("team");
   const [user, setUser] = useState<AuthUser | null>(null);
 
   const load = useCallback(async () => {
-    const [protoRes, meRes] = await Promise.all([
+    const [protoRes, teamRes, meRes] = await Promise.all([
       fetch("/api/prototypes"),
+      fetch("/api/team-gallery"),
       fetch("/api/me"),
     ]);
     const data = await protoRes.json();
+    const team = await teamRes.json();
     const me = await meRes.json();
     setUser(me.user);
     setPrototypes(data.prototypes ?? []);
+    setTeamGallery(team.prototypes ?? []);
   }, []);
 
   useEffect(() => {
@@ -49,22 +54,22 @@ export function Dashboard() {
     if (!user) return [];
 
     if (view === "team") {
-      return prototypes.filter((p) => p.status === "published");
+      return teamGallery;
     }
     if (view === "my-drafts") {
       return prototypes.filter((p) => p.status === "draft" && isOwnPrototype(p, user));
     }
     return prototypes.filter((p) => p.status === "published" && isOwnPrototype(p, user));
-  }, [prototypes, view, user]);
+  }, [prototypes, teamGallery, view, user]);
 
   const counts = useMemo(() => {
     if (!user) return { team: 0, myDrafts: 0, myPublished: 0 };
     return {
-      team: prototypes.filter((p) => p.status === "published").length,
+      team: teamGallery.length,
       myDrafts: prototypes.filter((p) => p.status === "draft" && isOwnPrototype(p, user)).length,
       myPublished: prototypes.filter((p) => p.status === "published" && isOwnPrototype(p, user)).length,
     };
-  }, [prototypes, user]);
+  }, [prototypes, teamGallery, user]);
 
   return (
     <div className="min-h-screen bg-[#050505] text-white">
@@ -144,7 +149,7 @@ export function Dashboard() {
             </p>
             <p className="mt-2 text-sm text-zinc-500">
               {view === "team"
-                ? "When anyone publishes, it appears here for the whole team."
+                ? "Publish from My drafts, then commit and push data/team-registry.json so teammates see your link here."
                 : "Create new - build in Cursor or Claude, then publish from your draft card."}
             </p>
             {view !== "team" && (

@@ -21,6 +21,8 @@ export interface Prototype {
   localPreviewUrl?: string;
   /** Unique Vite dev port for this prototype (e.g. 5173, 5174, …). */
   localPort?: number;
+  /** Shared team-registry entry (no local Desktop folder). */
+  fromRegistry?: boolean;
 }
 
 export interface Comment {

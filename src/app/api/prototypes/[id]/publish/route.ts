@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser, isOwnPrototype } from "@/lib/auth";
 import { publishPrototypeToUx } from "@/lib/publish";
 import { getPrototype, publishPrototype } from "@/lib/store";
+import { upsertLocalRegistry } from "@/lib/teamRegistry";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -42,10 +43,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       prototype.slug,
     );
     const updated = publishPrototype(prototype.id, result.previewUrl);
+    if (updated) {
+      upsertLocalRegistry(updated);
+    }
     return NextResponse.json({
       prototype: updated,
       previewUrl: result.previewUrl,
       shareUrl: result.shareUrl,
+      teamRegistryUpdated: true,
+      teamShareHint:
+        "Added to data/team-registry.json. Commit and push so teammates see it in Team gallery.",
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Publish failed";

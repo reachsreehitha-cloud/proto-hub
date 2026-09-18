@@ -72,6 +72,7 @@ export function PrototypeCard({
   const [pathCopied, setPathCopied] = useState(false);
   const [sshPassword, setSshPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [teamShareHint, setTeamShareHint] = useState("");
 
   const publishUsername = accountId || prototype.authorEmail.split("@")[0] || "";
   const expectedLiveUrl = publishUsername
@@ -115,6 +116,9 @@ export function PrototypeCard({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Publish failed");
       setSshPassword("");
+      if (typeof data.teamShareHint === "string") {
+        setTeamShareHint(data.teamShareHint);
+      }
       onRefresh();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Publish failed");
@@ -314,6 +318,7 @@ export function PrototypeCard({
         )}
 
         {actionError && <p className="text-xs text-red-300">{actionError}</p>}
+        {teamShareHint && <p className="text-xs text-emerald-300/90">{teamShareHint}</p>}
 
         {showOwnerTools && (
           <div className="mt-auto flex flex-wrap items-center gap-1 pt-2">

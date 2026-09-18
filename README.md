@@ -2,14 +2,13 @@
 
 Hackathon tool for NetApp UX: create Blueprint prototypes, build in Cursor or Claude, publish to ux.netapp.com, share links with the team.
 
-This runs **on your Mac** (localhost). It is not a shared hosted web app yet. Everyone clones and runs their own copy.
+## How multi-user works (hackathon)
 
-## Prerequisites
-
-- Mac with Node.js 20+ (`node -v`)
-- NetApp VPN or Zscaler (`@netapp.com` tenant) when installing Blueprint / publishing
-- Cursor and/or Claude Code installed (optional but recommended)
-- Your NetApp SSO password for Publish (not your Mac login)
+| What | Works for everyone? | How |
+|------|---------------------|-----|
+| **Team gallery** (browse / open / copy live links) | Yes | Shared `data/team-registry.json` + GitHub. Everyone's Proto Hub loads it. |
+| **Create new / drafts / Publish** | On each person's Mac | Clone and run locally. Needs Desktop, VPN, SSO password. |
+| **Hosting Proto Hub on ux.netapp.com** | Browse-only at best | OpenLab is static. Create/Publish need a local (or future IT-hosted) Node app. |
 
 ## Clone and run
 
@@ -22,17 +21,26 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-## How to use
+**Need:** Node 20+, VPN/Zscaler for Blueprint + Publish, NetApp SSO password for Publish (not Mac password).
 
-1. **Create new** - names a project, copies the Blueprint starter to your Desktop, opens your editor.
-2. Build the UI in Cursor or Claude inside that folder.
-3. In Proto Hub, open **My drafts**, enter your NetApp SSO password, hit **Publish**.
-4. Share the live `https://ux.netapp.com/~YOURID/slug/` link (also listed under **Team gallery** on your machine).
+Private repo: ask the owner to add you under **Settings → Collaborators**.
 
-Team gallery on localhost only shows prototypes **this Mac** knows about (its local data). To see someone else's live demo, open their ux.netapp.com link directly.
+## Share a prototype with the team
+
+1. Publish from **My drafts**.
+2. Proto Hub writes your live URL into `data/team-registry.json`.
+3. Commit and push:
+
+```bash
+git add data/team-registry.json
+git commit -m "Add my prototype to team gallery"
+git push
+```
+
+4. Teammates refresh Team gallery (or restart `npm run dev`) - they see Open / Copy for your ux.netapp.com link.
 
 ## Notes
 
-- Do not commit `.env` files or SSO passwords.
-- `data/prototypes.json` is local to each machine (gitignored).
-- Publish needs VPN/Zscaler and access to OpenLab (`cyclortp` / ux.netapp.com).
+- `data/prototypes.json` is local per Mac (gitignored).
+- `data/team-registry.json` is shared (committed).
+- Do not commit `.env` or passwords.
