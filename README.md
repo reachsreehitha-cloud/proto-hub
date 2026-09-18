@@ -14,7 +14,7 @@ This runs **on your Mac** (localhost). It is not a shared hosted web app yet. Ev
 ## Clone and run
 
 ```bash
-git clone <REPO_URL>
+git clone https://github.com/reachsreehitha-cloud/proto-hub.git
 cd proto-hub
 npm install
 npm run dev
