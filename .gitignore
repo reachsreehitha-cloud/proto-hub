@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local Proto Hub state (each developer gets their own)
+/data/prototypes.json
+/data/comments.json
+/public/covers/*
+!/public/covers/.gitkeep
