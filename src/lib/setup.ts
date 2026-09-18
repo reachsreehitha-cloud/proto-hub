@@ -1,10 +1,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { getTemplateAppDir } from "./templatePath";
 
-const HACKATHON_ROOT = path.resolve(process.cwd(), "..");
-const TEMPLATE_DIR = path.join(HACKATHON_ROOT, "template");
-const TEMPLATE_APP_DIR = path.join(TEMPLATE_DIR, "blueprint-app");
 const ENG_REGISTRY_LINE = "@netapp:registry=https://npm.repo.eng.netapp.com/";
 
 export interface AutoSetupResult {
@@ -13,7 +11,7 @@ export interface AutoSetupResult {
 
 export function templateHasBundledBlueprint(): boolean {
   return fs.existsSync(
-    path.join(TEMPLATE_APP_DIR, "node_modules", "@netapp", "blueprint", "package.json"),
+    path.join(getTemplateAppDir(), "node_modules", "@netapp", "blueprint", "package.json"),
   );
 }
 

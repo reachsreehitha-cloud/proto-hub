@@ -1,0 +1,11 @@
+{
+  "name": "prototype-template",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "npm run dev --prefix blueprint-app",
+    "build": "node scripts/build-blueprint-app.mjs",
+    "start": "npm run dev"
+  }
+}

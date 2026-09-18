@@ -1,0 +1,7 @@
+# Keep Blueprint starter dependencies in git so Create works offline / without npm auth.
+# Do not ignore node_modules here.
+.DS_Store
+dist/
+.env
+.env.local
+*.log

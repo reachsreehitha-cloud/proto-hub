@@ -4,9 +4,7 @@ import { execSync } from "node:child_process";
 import { defaultPrototypePath, slugify } from "./paths";
 import { autoSetupEnvironment, templateHasBundledBlueprint } from "./setup";
 import { writeDevPort } from "./preview";
-
-const HACKATHON_ROOT = path.resolve(process.cwd(), "..");
-const TEMPLATE_DIR = path.join(HACKATHON_ROOT, "template");
+import { getTemplateDir } from "./templatePath";
 
 const NPM_AUTH_GUIDE =
   "https://netapp.atlassian.net/wiki/spaces/UX/pages/699076324/GitHub+access+and+package+authentication+for+designers";
@@ -79,7 +77,7 @@ Starter prompt is in CURSOR_PROMPT.md if you need it.
 }
 
 function setupNpmrc(appDir: string) {
-  const templateNpmrc = path.join(TEMPLATE_DIR, "blueprint-app", ".npmrc");
+  const templateNpmrc = path.join(getTemplateDir(), "blueprint-app", ".npmrc");
   const destNpmrc = path.join(appDir, ".npmrc");
 
   // Prefer NetApp eng registry (matches working ONTAP prototypes)
@@ -222,8 +220,11 @@ export function scaffoldPrototype(
   editor: EditorChoice = "cursor",
   localPort = 5173,
 ): ScaffoldResult {
-  if (!fs.existsSync(TEMPLATE_DIR) || !templateHasBundledBlueprint()) {
-    throw new Error("Proto Hub starter files are unavailable. Contact the UX platform team.");
+  const templateDir = getTemplateDir();
+  if (!fs.existsSync(templateDir) || !templateHasBundledBlueprint()) {
+    throw new Error(
+      "Proto Hub starter files are unavailable. Pull the latest repo (template/ must be present) or contact the UX platform team.",
+    );
   }
 
   autoSetupEnvironment();
@@ -235,7 +236,7 @@ export function scaffoldPrototype(
     throw new Error(`A folder already exists at: ${dest}`);
   }
 
-  copyDir(TEMPLATE_DIR, dest);
+  copyDir(templateDir, dest);
   replaceInFile(path.join(dest, "package.json"), {
     '"name": "prototype-template"': `"name": "${slug}"`,
   });

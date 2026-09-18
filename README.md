@@ -21,7 +21,9 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-**Need:** Node 20+, VPN/Zscaler for Blueprint + Publish, NetApp SSO password for Publish (not Mac password).
+**Need:** Node 20+, VPN/Zscaler for Publish to OpenLab, NetApp SSO password for Publish (not Mac password).
+
+The Blueprint starter lives in `template/` (including dependencies) so **Create new** works after clone without a separate Hackathon folder.
 
 Private repo: ask the owner to add you under **Settings → Collaborators**.
 

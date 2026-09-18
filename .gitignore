@@ -45,3 +45,6 @@ next-env.d.ts
 /data/comments.json
 /public/covers/*
 !/public/covers/.gitkeep
+
+# Blueprint starter ships WITH node_modules so Create works after clone
+# (do not add template/**/node_modules to ignore lists)
