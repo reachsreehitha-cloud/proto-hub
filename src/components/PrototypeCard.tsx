@@ -4,8 +4,10 @@ import { useState } from "react";
 import { PrototypeCover } from "./PrototypeCover";
 import {
   CodeIcon,
+  CopyIcon,
   EyeIcon,
   EyeOffIcon,
+  ExternalLinkIcon,
   FolderIcon,
   TrashIcon,
 } from "./icons";
@@ -192,6 +194,14 @@ export function PrototypeCard({
     window.setTimeout(() => setLinkCopied(false), 2500);
   }
 
+  function openLive() {
+    if (!liveUrl) {
+      setActionError("No live link yet - publish first.");
+      return;
+    }
+    window.open(liveUrl, "_blank", "noopener,noreferrer");
+  }
+
   async function remove() {
     const confirmed = window.confirm(
       `Remove "${prototype.name}" from Proto Hub?\n\nYour project folder on Desktop will stay - only the hub listing is removed.`,
@@ -233,7 +243,7 @@ export function PrototypeCard({
         </p>
 
         {isPublished && liveUrl && (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1">
             <a
               href={liveUrl}
               target="_blank"
@@ -242,15 +252,17 @@ export function PrototypeCard({
             >
               {liveUrl}
             </a>
-            <button
-              type="button"
+            <IconButton label="Open live prototype" onClick={openLive} className="h-9 w-9 shrink-0">
+              <ExternalLinkIcon className="h-4 w-4" />
+            </IconButton>
+            <IconButton
+              label={linkCopied ? "Link copied" : "Copy link"}
               onClick={copyLiveLink}
-              aria-label={linkCopied ? "Link copied" : "Copy link"}
+              className="h-9 w-9 shrink-0"
               aria-live="polite"
-              className="shrink-0 text-xs font-medium text-zinc-300 underline-offset-2 hover:text-white hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
             >
-              {linkCopied ? "Copied" : "Copy"}
-            </button>
+              <CopyIcon className="h-4 w-4" />
+            </IconButton>
           </div>
         )}
 
