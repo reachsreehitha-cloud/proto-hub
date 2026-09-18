@@ -18,10 +18,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const body = await request.json().catch(() => ({}));
   const password = typeof body.password === "string" ? body.password.trim() : "";
-  const username = user.accountId;
+  const usernameRaw =
+    typeof body.username === "string" && body.username.trim()
+      ? body.username.trim()
+      : user.accountId;
+  const username = usernameRaw.toLowerCase().replace(/[^a-z0-9_-]/g, "");
 
   if (!username) {
-    return NextResponse.json({ error: "Could not determine your NetApp account." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Enter your short NetApp username (OpenLab id), e.g. dyland." },
+      { status: 400 },
+    );
   }
 
   if (!password) {

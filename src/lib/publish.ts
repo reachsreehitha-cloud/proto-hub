@@ -65,7 +65,6 @@ function stripBanner(text: string): string {
 
 function friendlySshError(detail: string, username?: string): string {
   const text = stripBanner(detail).toLowerCase();
-  const target = username ? `${username}@${SSH_HOST}` : SSH_HOST;
 
   if (
     text.includes("permission denied") ||
@@ -74,9 +73,9 @@ function friendlySshError(detail: string, username?: string): string {
   ) {
     return [
       "SSH login failed.",
-      "Use your NetApp SSO password - not your Mac login password.",
-      `Username is your short NetApp ID (${username || "sb29895"}), not email.`,
-      "Connect VPN / Zscaler (@netapp.com tenant), then retry Publish.",
+      `Tried username "${username || "?"}" - confirm your short NetApp ID (e.g. dyland, not full name).`,
+      "Use the password that works for NetApp SSO / OpenLab SSH.",
+      "Connect VPN / Zscaler (@netapp.com), then retry.",
     ].join(" ");
   }
   if (

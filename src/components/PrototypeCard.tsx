@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PrototypeCover } from "./PrototypeCover";
 import {
   CodeIcon,
@@ -15,9 +15,20 @@ import { Button, Card, IconButton, Input } from "./ui";
 import type { Prototype } from "@/lib/types";
 import { isSharedLocalPreview } from "@/lib/coverPlaceholder";
 
+const OPENLAB_USER_KEY = "proto-hub-openlab-username";
+
 function authorLabel(prototype: Prototype, isOwn: boolean) {
   if (isOwn) return "You";
   return prototype.author?.trim() || prototype.authorEmail.split("@")[0] || "Someone";
+}
+
+function readStoredUsername(fallback: string) {
+  if (typeof window === "undefined") return fallback;
+  try {
+    return localStorage.getItem(OPENLAB_USER_KEY)?.trim() || fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 /** Works on localhost even when navigator.clipboard is blocked. */
@@ -63,6 +74,7 @@ export function PrototypeCard({
 }) {
   const isPublished = prototype.status === "published";
   const showOwnerTools = isOwn && !galleryMode;
+  const guessedUser = accountId || prototype.authorEmail.split("@")[0] || "";
   const [publishing, setPublishing] = useState(false);
   const [opening, setOpening] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -73,8 +85,13 @@ export function PrototypeCard({
   const [sshPassword, setSshPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [teamShareHint, setTeamShareHint] = useState("");
+  const [openLabUsername, setOpenLabUsername] = useState(guessedUser);
 
-  const publishUsername = accountId || prototype.authorEmail.split("@")[0] || "";
+  useEffect(() => {
+    setOpenLabUsername(readStoredUsername(guessedUser));
+  }, [guessedUser]);
+
+  const publishUsername = openLabUsername.trim().toLowerCase() || guessedUser;
   const expectedLiveUrl = publishUsername
     ? `https://ux.netapp.com/~${publishUsername}/${prototype.slug}/`
     : "";
@@ -100,6 +117,10 @@ export function PrototypeCard({
   }
 
   async function publish() {
+    if (!publishUsername.trim()) {
+      setActionError("Enter your short NetApp username (OpenLab id).");
+      return;
+    }
     if (!sshPassword.trim()) {
       setActionError("Enter your NetApp SSO password to publish.");
       return;
@@ -108,10 +129,19 @@ export function PrototypeCard({
     setPublishing(true);
     setActionError("");
     try {
+      try {
+        localStorage.setItem(OPENLAB_USER_KEY, publishUsername.trim().toLowerCase());
+      } catch {
+        // ignore
+      }
+
       const res = await fetch(`/api/prototypes/${prototype.id}/publish`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: sshPassword }),
+        body: JSON.stringify({
+          password: sshPassword,
+          username: publishUsername.trim().toLowerCase(),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Publish failed");
@@ -280,6 +310,13 @@ export function PrototypeCard({
             )}
 
             <div className="space-y-1.5">
+              <Input
+                value={openLabUsername}
+                onChange={(event) => setOpenLabUsername(event.target.value)}
+                placeholder="Short NetApp username (e.g. dyland)"
+                autoComplete="username"
+                aria-label="OpenLab username"
+              />
               <div className="relative">
                 <Input
                   type={showPassword ? "text" : "password"}
@@ -290,7 +327,7 @@ export function PrototypeCard({
                   aria-describedby={`publish-hint-${prototype.id}`}
                   className="pr-12"
                   onKeyDown={(event) => {
-                    if (event.key === "Enter" && sshPassword.trim()) publish();
+                    if (event.key === "Enter" && sshPassword.trim() && publishUsername.trim()) publish();
                   }}
                 />
                 <button
@@ -304,13 +341,13 @@ export function PrototypeCard({
                 </button>
               </div>
               <p id={`publish-hint-${prototype.id}`} className="text-xs leading-relaxed text-zinc-500">
-                VPN or Zscaler (@netapp.com). Use your NetApp SSO password - not your Mac login.
+                Short OpenLab id + NetApp password. VPN / Zscaler (@netapp.com). Edit username if the guess is wrong.
               </p>
             </div>
             <Button
               className="w-full"
               onClick={publish}
-              disabled={publishing || opening || deleting || !sshPassword.trim()}
+              disabled={publishing || opening || deleting || !sshPassword.trim() || !publishUsername.trim()}
             >
               {publishing ? "Publishing…" : isPublished ? "Republish" : "Publish"}
             </Button>
