@@ -128,8 +128,9 @@ export function Dashboard() {
             {(Object.keys(VIEW_META) as View[]).map((key) => (
               <button
                 key={key}
+                type="button"
                 onClick={() => setView(key)}
-                className={`rounded-full px-4 py-2 text-sm transition ${
+                className={`cursor-pointer rounded-full px-4 py-2 text-sm transition ${
                   view === key ? "bg-white text-black" : "border border-white/10 text-zinc-400 hover:bg-white/5"
                 }`}
               >

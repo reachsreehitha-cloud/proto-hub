@@ -68,7 +68,7 @@ export function CommentsEnabledToggle({
         title={hint}
         disabled={busy}
         onClick={() => void toggle()}
-        className={`relative h-6 w-10 shrink-0 rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:opacity-50 ${
+        className={`relative h-6 w-10 shrink-0 cursor-pointer rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-50 ${
           isOn ? "bg-white" : "bg-white/15"
         }`}
       >

@@ -12,7 +12,7 @@ export function Button({
   };
   return (
     <button
-      className={`inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-medium transition ${variants[variant]} disabled:opacity-50 ${className}`}
+      className={`inline-flex cursor-pointer items-center justify-center rounded-full px-5 py-2.5 text-sm font-medium transition ${variants[variant]} disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
       {...props}
     />
   );
@@ -62,7 +62,7 @@ export function IconButton({
       type="button"
       aria-label={label}
       title={label}
-      className={`inline-flex h-10 w-10 items-center justify-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-40 ${tones[tone]} ${className}`}
+      className={`inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-full transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-40 ${tones[tone]} ${className}`}
       {...props}
     />
   );
