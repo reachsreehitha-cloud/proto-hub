@@ -1,34 +1,21 @@
 #!/usr/bin/env node
 /**
- * One-command Proto Hub for the team:
- *   npx --yes github:reachsreehitha-cloud/proto-hub
+ * Install Proto Hub as a macOS menu-bar app (next to Wi‑Fi).
  *
- * Clones/updates ~/ProtoHub, installs deps, adds a Dock/Applications
- * launcher, starts the app, and opens it in the browser.
+ *   npx --yes github:reachsreehitha-cloud/proto-hub
+ *   node bin/proto-hub.js
+ *
+ * Does NOT open a browser to localhost. Click the menu-bar icon to open the app.
  */
 const { spawn, spawnSync, execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const http = require("node:http");
 
 const REPO = "https://github.com/reachsreehitha-cloud/proto-hub.git";
-const PORT = Number(process.env.PORT || 3000);
 const APP_NAME = "Proto Hub";
 const APPLICATIONS_DIR = path.join(os.homedir(), "Applications");
 const APP_PATH = path.join(APPLICATIONS_DIR, `${APP_NAME}.app`);
-
-/** npx downloads are ephemeral — clone to ~/ProtoHub. Local checkouts run in place. */
-function getHubDir() {
-  const fromSource = path.resolve(__dirname, "..");
-  const isEphemeral = /[\\/](_npx|\.npm|_cacache)[\\/]/i.test(fromSource);
-  if (!isEphemeral && fs.existsSync(path.join(fromSource, "src", "app"))) {
-    return fromSource;
-  }
-  return path.join(os.homedir(), "ProtoHub");
-}
-
-const HUB_DIR = getHubDir();
 
 function log(msg) {
   console.log(`\x1b[36m▸\x1b[0m ${msg}`);
@@ -51,11 +38,20 @@ function run(cmd, args, opts = {}) {
 }
 
 function runQuiet(cmd, args, opts = {}) {
-  return spawnSync(cmd, args, {
-    encoding: "utf8",
-    ...opts,
-  });
+  return spawnSync(cmd, args, { encoding: "utf8", ...opts });
 }
+
+function getHubDir() {
+  const fromSource = path.resolve(__dirname, "..");
+  const isEphemeral = /[\\/](_npx|\.npm|_cacache)[\\/]/i.test(fromSource);
+  if (!isEphemeral && fs.existsSync(path.join(fromSource, "src", "app"))) {
+    return fromSource;
+  }
+  return path.join(os.homedir(), "ProtoHub");
+}
+
+const HUB_DIR = getHubDir();
+const MENUBAR_DIR = path.join(HUB_DIR, "menubar");
 
 function ensureNode() {
   const v = process.versions.node.split(".").map(Number);
@@ -70,19 +66,25 @@ function ensureGit() {
   }
 }
 
+function ensureDarwin() {
+  if (process.platform !== "darwin") {
+    fail("The menu-bar app is macOS-only right now.");
+  }
+}
+
 function ensureHubCheckout() {
   const pkg = path.join(HUB_DIR, "package.json");
+  const fromSource = path.resolve(__dirname, "..");
+  if (HUB_DIR === fromSource && fs.existsSync(pkg)) {
+    log(`Using Proto Hub at ${HUB_DIR}`);
+    return;
+  }
   if (!fs.existsSync(pkg)) {
     log(`Installing Proto Hub into ${HUB_DIR}`);
-    fs.mkdirSync(path.dirname(HUB_DIR), { recursive: true });
-    if (fs.existsSync(HUB_DIR)) {
-      // Empty or broken folder — remove and clone fresh
-      fs.rmSync(HUB_DIR, { recursive: true, force: true });
-    }
+    if (fs.existsSync(HUB_DIR)) fs.rmSync(HUB_DIR, { recursive: true, force: true });
     run("git", ["clone", "--depth", "1", REPO, HUB_DIR]);
     return;
   }
-
   log(`Updating ${HUB_DIR}`);
   const pull = runQuiet("git", ["-C", HUB_DIR, "pull", "--ff-only"], { stdio: "inherit" });
   if (pull.status !== 0) {
@@ -93,12 +95,10 @@ function ensureHubCheckout() {
 function ensureEnv() {
   const envPath = path.join(HUB_DIR, ".env");
   if (fs.existsSync(envPath)) return;
-
   const example = path.join(HUB_DIR, ".env.example");
   let body = fs.existsSync(example)
     ? fs.readFileSync(example, "utf8")
     : "NEXT_PUBLIC_APP_URL=http://localhost:3000\n";
-
   body = body.replace(
     /UX_COMMENTER_URL=.*/g,
     "UX_COMMENTER_URL=https://ux.netapp.com/__commenter",
@@ -106,61 +106,97 @@ function ensureEnv() {
   if (!/UX_COMMENTER_URL=/.test(body)) {
     body += "\nUX_COMMENTER_URL=https://ux.netapp.com/__commenter\n";
   }
-
   fs.writeFileSync(envPath, body);
   log("Created .env (comments point at ux.netapp.com)");
 }
 
 function ensureDeps() {
   const marker = path.join(HUB_DIR, "node_modules", "next", "package.json");
-  if (fs.existsSync(marker) && !process.env.PROTO_HUB_FORCE_INSTALL) {
-    log("Dependencies already installed");
-    return;
+  if (!fs.existsSync(marker) || process.env.PROTO_HUB_FORCE_INSTALL) {
+    log("Installing Proto Hub dependencies…");
+    run("npm", ["install"], { cwd: HUB_DIR });
+  } else {
+    log("Proto Hub dependencies ready");
   }
-  log("Installing npm dependencies (first run takes a minute)…");
-  run("npm", ["install"], { cwd: HUB_DIR });
+
+  const electronMarker = path.join(MENUBAR_DIR, "node_modules", "electron", "package.json");
+  if (!fs.existsSync(electronMarker) || process.env.PROTO_HUB_FORCE_INSTALL) {
+    log("Installing menu-bar app (Electron, first run downloads ~100MB)…");
+    run("npm", ["install"], { cwd: MENUBAR_DIR });
+  } else {
+    log("Menu-bar app ready");
+  }
 }
 
-function writeLauncherScript() {
+function electronBinary() {
+  const local = path.join(
+    MENUBAR_DIR,
+    "node_modules",
+    "electron",
+    "dist",
+    "Electron.app",
+    "Contents",
+    "MacOS",
+    "Electron",
+  );
+  if (fs.existsSync(local)) return local;
+  // electron may resolve via path.txt
+  const which = runQuiet("npx", ["electron", "--version"], { cwd: MENUBAR_DIR });
+  if (which.status !== 0) fail("Electron failed to install");
+  return path.join(
+    MENUBAR_DIR,
+    "node_modules",
+    ".bin",
+    "electron",
+  );
+}
+
+function writeMacApp() {
+  log(`Installing ${APP_NAME} into ~/Applications (menu bar)`);
   const macOsDir = path.join(APP_PATH, "Contents", "MacOS");
   const resourcesDir = path.join(APP_PATH, "Contents", "Resources");
   fs.mkdirSync(macOsDir, { recursive: true });
   fs.mkdirSync(resourcesDir, { recursive: true });
 
+  const electronApp = path.join(
+    MENUBAR_DIR,
+    "node_modules",
+    "electron",
+    "dist",
+    "Electron.app",
+  );
+  if (!fs.existsSync(electronApp)) {
+    fail("Electron.app missing — try PROTO_HUB_FORCE_INSTALL=1 and run again");
+  }
+
   const launcher = path.join(macOsDir, APP_NAME);
   const script = `#!/bin/bash
 set -e
-HUB_DIR="${HUB_DIR}"
-PORT="${PORT}"
-URL="http://localhost:$PORT"
+export PROTO_HUB_DIR="${HUB_DIR}"
+export PROTO_HUB_PORT="3000"
 export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.nvm/versions/node/$(ls "$HOME/.nvm/versions/node" 2>/dev/null | tail -1)/bin:$PATH"
-
-# Prefer nvm default if present
 if [ -s "$HOME/.nvm/nvm.sh" ]; then
   # shellcheck disable=SC1090
   . "$HOME/.nvm/nvm.sh"
 fi
 
-cd "$HUB_DIR"
+ELECTRON_APP="${electronApp}"
+MENUBAR="${MENUBAR_DIR}"
 
-is_up() {
-  curl -fsS --max-time 1 "$URL" >/dev/null 2>&1
-}
-
-if ! is_up; then
-  # Start in background; logs land in ~/Library/Logs
-  mkdir -p "$HOME/Library/Logs"
-  nohup npm run dev -- --port "$PORT" >"$HOME/Library/Logs/proto-hub.log" 2>&1 &
-  echo $! >"$HOME/Library/Logs/proto-hub.pid"
-  for i in $(seq 1 60); do
-    if is_up; then break; fi
-    sleep 0.5
-  done
+# Already running? Just activate via open — Electron single instance is soft; kill duplicates lightly
+if pgrep -f "electron.*menubar/main.js" >/dev/null 2>&1; then
+  exit 0
 fi
 
-open "$URL"
+exec "$ELECTRON_APP/Contents/MacOS/Electron" "$MENUBAR" "$@"
 `;
   fs.writeFileSync(launcher, script, { mode: 0o755 });
+
+  // Copy app icon into Resources if present
+  const iconSrc = path.join(MENUBAR_DIR, "assets", "AppIcon.png");
+  if (fs.existsSync(iconSrc)) {
+    fs.copyFileSync(iconSrc, path.join(resourcesDir, "AppIcon.png"));
+  }
 
   const plist = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -179,138 +215,87 @@ open "$URL"
   <key>CFBundleShortVersionString</key>
   <string>1.0</string>
   <key>LSUIElement</key>
-  <false/>
+  <true/>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
 </dict>
 </plist>
 `;
   fs.writeFileSync(path.join(APP_PATH, "Contents", "Info.plist"), plist);
-}
 
-function ensureMacApp() {
-  if (process.platform !== "darwin") {
-    log("Skipping macOS app (not on Mac)");
-    return;
-  }
-  log(`Adding ${APP_NAME} to ~/Applications`);
-  writeLauncherScript();
-
-  // Refresh Launch Services so Spotlight/Dock see it
   try {
-    execFileSync("/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister", [
-      "-f",
-      APP_PATH,
-    ]);
+    execFileSync(
+      "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
+      ["-f", APP_PATH],
+    );
   } catch {
     // optional
   }
-
-  log(`App ready at ${APP_PATH}`);
-  log("Drag “Proto Hub” from ~/Applications onto your Dock once — then one click opens it");
 }
 
-function waitForServer(ms = 60000) {
-  const start = Date.now();
-  return new Promise((resolve, reject) => {
-    const tick = () => {
-      const req = http.get(`http://127.0.0.1:${PORT}`, (res) => {
-        res.resume();
-        resolve();
-      });
-      req.on("error", () => {
-        if (Date.now() - start > ms) reject(new Error("Server did not start in time"));
-        else setTimeout(tick, 400);
-      });
-    };
-    tick();
-  });
+function addLoginItem() {
+  // Open at login so it stays in the menu bar after reboot
+  const script = `
+tell application "System Events"
+  set appPath to POSIX file "${APP_PATH}"
+  set existing to (name of every login item)
+  if existing does not contain "${APP_NAME}" then
+    make new login item at end of login items with properties {path:appPath, hidden:false, name:"${APP_NAME}"}
+  end if
+end tell
+`;
+  const r = runQuiet("osascript", ["-e", script]);
+  if (r.status === 0) {
+    log("Set to open at login (stays in the menu bar)");
+  } else {
+    log("Could not add login item automatically — open System Settings → General → Login Items if you want it at boot");
+  }
 }
 
-function startDevServer() {
-  log(`Starting Proto Hub on http://localhost:${PORT}`);
-  const child = spawn("npm", ["run", "dev", "--", "--port", String(PORT)], {
-    cwd: HUB_DIR,
-    stdio: "inherit",
-    env: process.env,
-  });
+function launchApp() {
+  // Quit old browser-style helper if somehow still running
+  runQuiet("pkill", ["-f", "Proto Hub.app/Contents/MacOS/Proto Hub"]);
+  runQuiet("pkill", ["-f", "electron.*menubar/main.js"]);
 
-  child.on("exit", (code) => {
-    if (code && code !== 0) fail(`dev server exited with ${code}`);
-  });
-
-  return child;
-}
-
-function openBrowser() {
-  const url = `http://localhost:${PORT}`;
-  if (process.platform === "darwin") runQuiet("open", [url]);
-  else if (process.platform === "win32") runQuiet("cmd", ["/c", "start", url]);
-  else runQuiet("xdg-open", [url]);
-  log(`Opened ${url}`);
+  log("Launching Proto Hub into your menu bar (next to Wi‑Fi)…");
+  run("open", ["-a", APP_PATH]);
+  log("Look up-right near Wi‑Fi for the Proto Hub icon. Click it to open.");
+  log("Right-click the icon → Quit Proto Hub when you want it gone.");
 }
 
 async function main() {
   const args = new Set(process.argv.slice(2));
   if (args.has("--help") || args.has("-h")) {
-    console.log(`Proto Hub — create, publish, and comment on Blueprint prototypes
+    console.log(`Proto Hub — menu bar app for Blueprint prototypes + live comments
 
 Usage:
   npx --yes github:reachsreehitha-cloud/proto-hub
-  proto-hub              # after install
-  proto-hub --install    # install/update + Dock app only (do not start)
-  proto-hub --open       # open the macOS app launcher
+  node bin/proto-hub.js
+  node bin/proto-hub.js --install   # install only, do not launch
 
-Needs: Node 20+, git, VPN/Zscaler for Publish, NetApp SSO password to publish.
-Repo is private — ask to be added as a collaborator first.
+Installs a menu-bar app next to Wi‑Fi. Click the icon to open Proto Hub
+in its own window (not Safari, no localhost URL bar).
+
+Needs: macOS, Node 20+, git, GitHub access to this private repo.
 `);
     return;
   }
 
+  ensureDarwin();
   ensureNode();
   ensureGit();
   ensureHubCheckout();
   ensureEnv();
   ensureDeps();
-  ensureMacApp();
+  writeMacApp();
+  addLoginItem();
 
   if (args.has("--install")) {
-    log("Install complete. Run again without --install to start, or click Proto Hub in your Dock.");
+    log("Install complete. Run again without --install, or open Proto Hub from ~/Applications.");
     return;
   }
 
-  if (args.has("--open") && process.platform === "darwin") {
-    run("open", [APP_PATH]);
-    return;
-  }
-
-  // If already running, just open
-  try {
-    await new Promise((resolve, reject) => {
-      const req = http.get(`http://127.0.0.1:${PORT}`, (res) => {
-        res.resume();
-        resolve();
-      });
-      req.on("error", reject);
-      req.setTimeout(500, () => {
-        req.destroy();
-        reject(new Error("timeout"));
-      });
-    });
-    log("Proto Hub is already running");
-    openBrowser();
-    return;
-  } catch {
-    // start fresh
-  }
-
-  startDevServer();
-  try {
-    await waitForServer();
-    openBrowser();
-    log("Create a prototype → Publish with comments on → share the ux.netapp.com link");
-    log("Stop with Ctrl+C. Next time: click Proto Hub in your Dock, or run the same npm command.");
-  } catch (err) {
-    fail(err.message || String(err));
-  }
+  launchApp();
 }
 
 main().catch((err) => fail(err.stack || String(err)));

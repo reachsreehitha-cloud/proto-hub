@@ -4,7 +4,7 @@ Hackathon tool for NetApp UX: create Blueprint prototypes, build in Cursor or Cl
 
 ## One command for the team (demo)
 
-Needs Node 20+, git, and GitHub access to this private repo (ask to be added as a collaborator).
+Needs macOS, Node 20+, git, and GitHub access to this private repo (ask to be added as a collaborator).
 
 ```bash
 npx --yes github:reachsreehitha-cloud/proto-hub
@@ -12,11 +12,13 @@ npx --yes github:reachsreehitha-cloud/proto-hub
 
 That will:
 
-1. Install Proto Hub into `~/ProtoHub`
-2. Put **Proto Hub** in `~/Applications` (drag it to your Dock once)
-3. Start the app and open [http://localhost:3000](http://localhost:3000)
+1. Install Proto Hub
+2. Put a **menu-bar app** next to Wi‑Fi (top-right of the screen)
+3. Open at login so it stays there
 
-Next time: click **Proto Hub** in your Dock, or run the same `npx` command again.
+Click the Proto Hub icon in the menu bar to open the app window. No browser. No typing localhost.
+
+Right-click the icon → **Quit Proto Hub** when you want it gone.
 
 **Need for Publish:** VPN/Zscaler, NetApp SSO password (not Mac password).
 
