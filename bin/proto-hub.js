@@ -41,17 +41,14 @@ function runQuiet(cmd, args, opts = {}) {
   return spawnSync(cmd, args, { encoding: "utf8", ...opts });
 }
 
+/** One stable install path so the menu-bar app and Create/Publish share the same data. */
 function getHubDir() {
-  const fromSource = path.resolve(__dirname, "..");
-  const isEphemeral = /[\\/](_npx|\.npm|_cacache)[\\/]/i.test(fromSource);
-  if (!isEphemeral && fs.existsSync(path.join(fromSource, "src", "app"))) {
-    return fromSource;
-  }
   return path.join(os.homedir(), "ProtoHub");
 }
 
 const HUB_DIR = getHubDir();
 const MENUBAR_DIR = path.join(HUB_DIR, "menubar");
+const SOURCE_DIR = path.resolve(__dirname, "..");
 
 function ensureNode() {
   const v = process.versions.node.split(".").map(Number);
@@ -72,24 +69,50 @@ function ensureDarwin() {
   }
 }
 
+function syncFromSourceTree() {
+  const isEphemeral = /[\\/](_npx|\.npm|_cacache)[\\/]/i.test(SOURCE_DIR);
+  if (isEphemeral || SOURCE_DIR === HUB_DIR) return false;
+  if (!fs.existsSync(path.join(SOURCE_DIR, "src", "app"))) return false;
+
+  log(`Syncing ${SOURCE_DIR} → ${HUB_DIR}`);
+  // Keep local draft data; refresh app code + menubar + template
+  const excludes = [
+    "--exclude", "node_modules",
+    "--exclude", ".next",
+    "--exclude", "menubar/node_modules",
+    "--exclude", "data/prototypes.json",
+    "--exclude", "data/comments.json",
+    "--exclude", ".env",
+    "--exclude", ".git",
+  ];
+  const r = runQuiet(
+    "rsync",
+    ["-a", "--delete", ...excludes, `${SOURCE_DIR}/`, `${HUB_DIR}/`],
+  );
+  if (r.status !== 0) {
+    // Fallback without --delete if rsync missing flags
+    run("rsync", ["-a", ...excludes, `${SOURCE_DIR}/`, `${HUB_DIR}/`]);
+  }
+  return true;
+}
+
 function ensureHubCheckout() {
   const pkg = path.join(HUB_DIR, "package.json");
-  const fromSource = path.resolve(__dirname, "..");
-  if (HUB_DIR === fromSource && fs.existsSync(pkg)) {
-    log(`Using Proto Hub at ${HUB_DIR}`);
-    return;
-  }
   if (!fs.existsSync(pkg)) {
     log(`Installing Proto Hub into ${HUB_DIR}`);
     if (fs.existsSync(HUB_DIR)) fs.rmSync(HUB_DIR, { recursive: true, force: true });
     run("git", ["clone", "--depth", "1", REPO, HUB_DIR]);
-    return;
+  } else {
+    log(`Updating ${HUB_DIR}`);
+    const pull = runQuiet("git", ["-C", HUB_DIR, "pull", "--ff-only"], { stdio: "inherit" });
+    if (pull.status !== 0) {
+      log("Could not fast-forward from GitHub. Trying local sync…");
+    }
   }
-  log(`Updating ${HUB_DIR}`);
-  const pull = runQuiet("git", ["-C", HUB_DIR, "pull", "--ff-only"], { stdio: "inherit" });
-  if (pull.status !== 0) {
-    log("Could not fast-forward (local changes?). Continuing with what you have.");
-  }
+
+  // When you run from a newer Hackathon checkout, push those files into ~/ProtoHub
+  syncFromSourceTree();
+  log(`Proto Hub home: ${HUB_DIR}`);
 }
 
 function ensureEnv() {

@@ -12,7 +12,7 @@ const {
   Notification,
   dialog,
 } = require("electron");
-const { spawn } = require("node:child_process");
+const { spawn, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
@@ -90,12 +90,26 @@ function resolveNpm() {
   return "npm";
 }
 
+function killStaleServer() {
+  // Never attach to a leftover next on :3000 from an old ~/ProtoHub or other clone
+  try {
+    spawnSync("bash", ["-lc", `lsof -ti tcp:${PORT} | xargs kill -9 2>/dev/null || true`], {
+      stdio: "ignore",
+    });
+  } catch {
+    // ignore
+  }
+}
+
 async function ensureServer() {
-  if (await isServerUp()) return;
   if (startingServer) return startingServer;
 
   startingServer = (async () => {
-    log("Starting Proto Hub server…");
+    // Always restart from this install’s Proto Hub folder
+    killStaleServer();
+    await new Promise((r) => setTimeout(r, 400));
+
+    log("Starting Proto Hub server from", HUB_DIR);
     const npm = resolveNpm();
     const env = { ...process.env, PORT: String(PORT) };
     serverProc = spawn(npm, ["run", "dev", "--", "--port", String(PORT)], {

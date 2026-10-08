@@ -1,11 +1,17 @@
 import { NextResponse } from "next/server";
 import { isSharedLocalPreview } from "@/lib/coverPlaceholder";
 import { isPreviewReachable, resolveAutoPreviewUrl } from "@/lib/preview";
-import { getPrototype } from "@/lib/store";
+import { getPrototype, getPrototypes } from "@/lib/store";
+import { getTeamGalleryPrototypes } from "@/lib/teamRegistry";
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const prototype = getPrototype(id);
+  let prototype = getPrototype(id);
+  if (!prototype) {
+    // Team gallery cards use registry-* ids that are not in local drafts
+    const gallery = await getTeamGalleryPrototypes(getPrototypes());
+    prototype = gallery.find((p) => p.id === id || p.slug === id);
+  }
   if (!prototype) {
     return NextResponse.json({ error: "Prototype not found" }, { status: 404 });
   }
