@@ -59,6 +59,50 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ prototype: updated });
   }
 
+  if (typeof body.commentsEnabled === "boolean") {
+    const { registerSiteAdmin, setLiveCommentsEnabled, getCommenterBaseUrl } = await import(
+      "@/lib/commenterInject"
+    );
+    const updated = updatePrototype(prototype.id, { commentsEnabled: body.commentsEnabled });
+
+    let siteId = "";
+    if (typeof body.liveSiteId === "string" && body.liveSiteId.trim()) {
+      siteId = body.liveSiteId.trim().replace(/^\/+/, "");
+    } else {
+      const live = updated?.previewUrl || "";
+      const match = live.match(/\/~([^/]+)\/([^/]+)/);
+      if (match) siteId = `~${match[1]}/${match[2]}`;
+    }
+
+    if (siteId) {
+      const ownerLdap = siteId.startsWith("~")
+        ? siteId.slice(1).split("/")[0]
+        : user.accountId;
+      // Only the Proto Hub prototype owner reaches this PATCH (isOwnPrototype).
+      await registerSiteAdmin({
+        commenterBaseUrl: getCommenterBaseUrl(),
+        siteId,
+        ldap: ownerLdap,
+        email: user.email,
+        name: user.name,
+      });
+      await setLiveCommentsEnabled({
+        commenterBaseUrl: getCommenterBaseUrl(),
+        siteId,
+        enabled: body.commentsEnabled,
+        ownerLdap,
+      });
+    }
+
+    return NextResponse.json({
+      prototype: updated,
+      siteId: siteId || null,
+      hint: body.commentsEnabled
+        ? "Live comments on. Only you (signed-in owner) can change this."
+        : "Live comments off. Only you (signed-in owner) can turn them back on.",
+    });
+  }
+
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });
 }
 

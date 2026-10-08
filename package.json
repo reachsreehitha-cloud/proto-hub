@@ -2,11 +2,17 @@
   "name": "proto-hub",
   "version": "0.1.0",
   "private": true,
+  "description": "Create Blueprint prototypes, publish to ux.netapp.com, and turn on live comments",
+  "bin": {
+    "proto-hub": "./bin/proto-hub.js"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "proto-hub": "node bin/proto-hub.js",
+    "install:app": "node bin/proto-hub.js --install"
   },
   "dependencies": {
     "next": "16.3.5",

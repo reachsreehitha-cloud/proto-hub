@@ -144,6 +144,11 @@ export function PrototypeCover({
             <Badge tone={isPublished ? "success" : "warning"}>
               {isPublished ? "Published" : "Draft"}
             </Badge>
+            {prototype.commentsEnabled === false && (
+              <span title="Only the prototype owner can turn comments back on">
+                <Badge tone="muted">Comments off</Badge>
+              </span>
+            )}
           </div>
 
           {isOwn && onUploadCover && (

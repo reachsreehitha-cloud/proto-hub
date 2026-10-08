@@ -1,32 +1,46 @@
-import { BpAppShell, BpContentRegion, BpHeader, BpMainNav, BpMainRegion, BpServiceNavItem } from "@netapp/blueprint";
+import {
+  BpAppShell,
+  BpContentRegion,
+  BpHeader,
+  BpInline,
+  BpMainRegion,
+  BpServiceNav,
+  BpStack,
+} from "@netapp/blueprint";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 
 const navItems = [
-  { label: "Home", path: "/home" },
-  { label: "Details", path: "/details" },
+  { id: "home", label: "Home", path: "/home" },
+  { id: "details", label: "Details", path: "/details" },
 ];
 
 export function PrototypeShell() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const selectedItemId = location.pathname.startsWith("/details") ? "details" : "home";
+
   return (
     <BpAppShell>
-      <BpHeader.Prototype title="Your prototype" />
+      <BpHeader.Prototype productName="Your prototype" />
       <BpMainRegion>
-        <BpMainNav>
-          {navItems.map((item) => (
-            <BpServiceNavItem
-              key={item.path}
-              label={item.label}
-              selected={location.pathname === item.path}
-              onClick={() => navigate(item.path)}
-            />
-          ))}
-        </BpMainNav>
-        <BpContentRegion>
-          <Outlet />
-        </BpContentRegion>
+        <BpInline wrap={false} space="0" style={{ alignItems: "stretch", width: "100%" }}>
+          <BpServiceNav
+            serviceLabel="Prototype"
+            categoryLabel="Screens"
+            items={navItems.map(({ id, label }) => ({ id, label }))}
+            selectedItemId={selectedItemId}
+            onItemSelect={(id) => {
+              const item = navItems.find((navItem) => navItem.id === id);
+              if (item) navigate(item.path);
+            }}
+          />
+          <BpStack grow space="0" style={{ minWidth: 0 }}>
+            <BpContentRegion width="wide">
+              <Outlet />
+            </BpContentRegion>
+          </BpStack>
+        </BpInline>
       </BpMainRegion>
     </BpAppShell>
   );

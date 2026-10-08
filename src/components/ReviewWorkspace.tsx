@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge, Button, Input, Textarea } from "./ui";
+import { WatchToggle } from "./WatchToggle";
 import type { Comment, Prototype } from "@/lib/types";
 
 function renderBody(body: string) {
@@ -27,6 +28,7 @@ export function ReviewWorkspace({ prototypeId }: { prototypeId: string }) {
   const [shareUrl, setShareUrl] = useState("");
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState("");
+  const [publishSuccess, setPublishSuccess] = useState("");
   const frameRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -96,14 +98,21 @@ export function ReviewWorkspace({ prototypeId }: { prototypeId: string }) {
   async function publishPrototype() {
     setPublishing(true);
     setPublishError("");
+    setPublishSuccess("");
     try {
       const res = await fetch(`/api/prototypes/${prototypeId}/publish`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Publish failed");
       setPreviewUrl(data.previewUrl);
       setShareUrl(data.shareUrl);
+      setPublishSuccess(
+        data.previewUrl
+          ? `Published successfully. Live at ${data.previewUrl}`
+          : "Published successfully.",
+      );
       await load();
     } catch (err) {
+      setPublishSuccess("");
       setPublishError(err instanceof Error ? err.message : "Publish failed");
     } finally {
       setPublishing(false);
@@ -156,7 +165,8 @@ export function ReviewWorkspace({ prototypeId }: { prototypeId: string }) {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <WatchToggle prototypeId={prototype.id} variant="button" />
             <Button variant="outline" onClick={publishPrototype} disabled={publishing}>
               {publishing ? "Publishing…" : prototype.status === "published" ? "Republish" : "Publish"}
             </Button>
@@ -171,6 +181,16 @@ export function ReviewWorkspace({ prototypeId }: { prototypeId: string }) {
 
         {publishError && (
           <div className="border-b border-red-500/20 bg-red-500/10 px-5 py-2 text-sm text-red-300">{publishError}</div>
+        )}
+
+        {publishSuccess && (
+          <div
+            className="border-b border-emerald-500/20 bg-emerald-500/10 px-5 py-2 text-sm text-emerald-100"
+            role="status"
+            aria-live="polite"
+          >
+            {publishSuccess}
+          </div>
         )}
 
         {prototype.status === "published" && shareUrl && (
@@ -295,7 +315,7 @@ export function ReviewWorkspace({ prototypeId }: { prototypeId: string }) {
           <Textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
-            placeholder="Leave feedback. Use @email@netapp.com to notify teammates."
+            placeholder="Leave feedback. Use @email@netapp.com to notify. Watching also emails you (Unsubscribe in the header)."
             rows={4}
           />
           <Button className="mt-3 w-full" onClick={submitComment} disabled={!body.trim()}>

@@ -111,3 +111,23 @@ export function EyeOffIcon(props: SVGProps<SVGSVGElement>) {
     </IconBase>
   );
 }
+
+export function BellIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <IconBase {...props}>
+      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+      <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+    </IconBase>
+  );
+}
+
+export function BellOffIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <IconBase {...props}>
+      <path d="M8.7 3A6 6 0 0 1 18 8c0 2.1.5 3.8 1.2 5.1" />
+      <path d="M17 17H3s3-2 3-9a5.9 5.9 0 0 1 .5-2.4" />
+      <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+      <path d="M3 3l18 18" />
+    </IconBase>
+  );
+}

@@ -111,13 +111,14 @@ export function createPrototypeRecord(
   const localPort = options?.localPort ?? allocateLocalPort(existing);
   const localPreviewUrl = localPreviewUrlForPort(localPort);
 
+  const authorEmail = input.authorEmail.trim().toLowerCase();
   const prototype: Prototype = {
     id: randomUUID(),
     name: input.name,
     slug,
     description: input.description ?? "",
     author: input.author,
-    authorEmail: input.authorEmail,
+    authorEmail,
     previewUrl: "",
     folderPath: input.folderPath ?? folderPath,
     editor: input.editor,
@@ -125,12 +126,61 @@ export function createPrototypeRecord(
     coverMode: "auto",
     localPort,
     localPreviewUrl,
+    // Owner automatically watches their own prototype
+    watchers: authorEmail.includes("@") ? [authorEmail] : [],
     createdAt: now,
     updatedAt: now,
   };
 
   savePrototype(prototype);
   return prototype;
+}
+
+function normalizeEmail(email: string): string {
+  return String(email || "").trim().toLowerCase();
+}
+
+export function getWatchers(prototype: Prototype): string[] {
+  const list = Array.isArray(prototype.watchers) ? prototype.watchers : [];
+  const author = normalizeEmail(prototype.authorEmail);
+  const set = new Set(list.map(normalizeEmail).filter((e) => e.includes("@")));
+  // Legacy records: treat owner as watching until they unsubscribe (empty array means unsubscribed)
+  if (!Array.isArray(prototype.watchers) && author.includes("@")) {
+    set.add(author);
+  }
+  return [...set];
+}
+
+export function isWatching(prototype: Prototype, email: string): boolean {
+  const target = normalizeEmail(email);
+  if (!target.includes("@")) return false;
+  return getWatchers(prototype).includes(target);
+}
+
+export function watchPrototype(id: string, email: string): Prototype | undefined {
+  const prototype = getPrototype(id);
+  if (!prototype) return undefined;
+  const target = normalizeEmail(email);
+  if (!target.includes("@")) return prototype;
+
+  const watchers = getWatchers(prototype);
+  if (watchers.includes(target)) {
+    // Ensure watchers field exists on legacy records
+    if (!Array.isArray(prototype.watchers)) {
+      return updatePrototype(id, { watchers });
+    }
+    return prototype;
+  }
+  return updatePrototype(id, { watchers: [...watchers, target] });
+}
+
+export function unwatchPrototype(id: string, email: string): Prototype | undefined {
+  const prototype = getPrototype(id);
+  if (!prototype) return undefined;
+  const target = normalizeEmail(email);
+  const watchers = getWatchers(prototype).filter((e) => e !== target);
+  // Persist explicit list (may be empty) so owner unsubscribe sticks
+  return updatePrototype(id, { watchers });
 }
 
 export function updatePrototype(id: string, patch: Partial<Prototype>): Prototype | undefined {

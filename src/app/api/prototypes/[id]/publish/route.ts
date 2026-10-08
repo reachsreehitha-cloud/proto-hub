@@ -48,6 +48,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       hubReviewUrl,
       { username, password },
       prototype.slug,
+      prototype.commentsEnabled !== false,
     );
     const updated = publishPrototype(prototype.id, result.previewUrl);
     if (updated) {
@@ -57,9 +58,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       prototype: updated,
       previewUrl: result.previewUrl,
       shareUrl: result.shareUrl,
+      commenterUrl: result.commenterUrl,
+      commentsInjected: result.commentsInjected,
       teamRegistryUpdated: true,
-      teamShareHint:
-        "Added to data/team-registry.json. Commit and push so teammates see it in Team gallery.",
+      teamShareHint: result.commentsInjected
+        ? "Comments are on for the live page. Open the link and use the comment bubble."
+        : "Comments are off for this live page. Turn them on in Proto Hub and republish, or use Comment inbox.",
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Publish failed";

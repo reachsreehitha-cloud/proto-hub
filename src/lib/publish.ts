@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { getCurrentUser } from "./auth";
+import { ensureCommenterProject, getCommenterBaseUrl, injectCommenterScript, registerSiteAdmin, setLiveCommentsEnabled } from "./commenterInject";
 import { slugify } from "./paths";
 
 /**
@@ -31,6 +32,9 @@ export interface PublishResult {
   previewUrl: string;
   shareUrl: string;
   deployPath: string;
+  /** Shared commenter host every prototype uses (same API / SSO / DB). */
+  commenterUrl?: string;
+  commentsInjected?: boolean;
 }
 
 function run(cmd: string, args: string[], cwd?: string) {
@@ -305,6 +309,7 @@ export async function publishPrototypeToUx(
   hubReviewUrl: string,
   credentials?: PublishCredentials,
   appSlug?: string,
+  commentsEnabled: boolean = true,
 ): Promise<PublishResult> {
   if (!fs.existsSync(folderPath)) {
     throw new Error(`Prototype folder not found: ${folderPath}`);
@@ -315,8 +320,33 @@ export async function publishPrototypeToUx(
   // OpenLab: files live in ~/web/{app} - Apache maps ~user → home, so URL is /~user/app/
   const remoteAppDir = `${REMOTE_BASE}/${appName}`;
   const previewUrl = `https://${BROWSE_HOST}/~${username}/${appName}/`;
+  const siteId = `~${username}/${appName}`;
 
   const distDir = buildDist(folderPath);
+
+  // Shared comment package. Owner can opt out via Proto Hub commentsEnabled.
+  const commenterBase = getCommenterBaseUrl();
+  const inject = injectCommenterScript(distDir, commenterBase, { enabled: commentsEnabled });
+  await ensureCommenterProject({
+    commenterBaseUrl: commenterBase,
+    name,
+    sourceUrl: previewUrl,
+    owner: username,
+  });
+  // Publisher becomes the only admin who may turn live comments on/off.
+  await registerSiteAdmin({
+    commenterBaseUrl: commenterBase,
+    siteId,
+    ldap: username,
+    email: `${username}@netapp.com`,
+    name: username,
+  });
+  await setLiveCommentsEnabled({
+    commenterBaseUrl: commenterBase,
+    siteId,
+    enabled: commentsEnabled,
+    ownerLdap: username,
+  });
 
   let session: SshSession | null = null;
 
@@ -345,5 +375,7 @@ export async function publishPrototypeToUx(
     previewUrl,
     shareUrl: hubReviewUrl,
     deployPath: `~${username}/${appName}`,
+    commenterUrl: commenterBase,
+    commentsInjected: inject.injected,
   };
 }

@@ -5,16 +5,18 @@ export function HomePage() {
   const navigate = useNavigate();
 
   return (
-    <BpStack gap="lg">
-      <BpText variant="heading1">Your prototype</BpText>
-      <BpText variant="body">
-        This starter uses @netapp/blueprint@legacy. Prompt Cursor to build your flow using Blueprint components,
-        tokens, and the layout guidance in node_modules/@netapp/blueprint/dist/agent/docs/ai-layout-guidance.md.
+    <BpStack space="400">
+      <BpText type="page-title">Your prototype</BpText>
+      <BpText type="body-text">
+        This starter uses @netapp/blueprint@legacy. Prompt Cursor or Claude to build your flow using Blueprint
+        components and the layout guidance in node_modules/@netapp/blueprint/dist/agent/docs/ai-layout-guidance.md.
       </BpText>
       <BpCard>
-        <BpStack gap="md">
-          <BpText variant="heading3">Starter screen</BpText>
-          <BpText variant="body">Replace this page with your concept. Keep hash routes so Proto Hub can deep-link to screens.</BpText>
+        <BpStack space="300">
+          <BpText type="section-title">Starter screen</BpText>
+          <BpText type="body-text">
+            Replace this page with your concept. Keep hash routes so Proto Hub can deep-link to screens.
+          </BpText>
           <BpButton onClick={() => navigate("/details")}>Go to details</BpButton>
         </BpStack>
       </BpCard>

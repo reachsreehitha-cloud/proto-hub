@@ -73,13 +73,14 @@ export function Badge({
   tone = "default",
 }: {
   children: ReactNode;
-  tone?: "default" | "success" | "warning";
+  tone?: "default" | "success" | "warning" | "muted";
 }) {
   // Opaque fills + high-contrast text so badges pass WCAG AA over cover images
   const tones = {
     default: "bg-zinc-100 text-zinc-900",
     success: "bg-emerald-300 text-emerald-950",
     warning: "bg-amber-300 text-amber-950",
+    muted: "bg-zinc-300 text-zinc-900",
   };
   return (
     <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${tones[tone]}`}>

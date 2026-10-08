@@ -12,6 +12,8 @@ import {
   TrashIcon,
 } from "./icons";
 import { Button, Card, IconButton, Input } from "./ui";
+import { WatchToggle } from "./WatchToggle";
+import { CommentsEnabledToggle } from "./CommentsEnabledToggle";
 import type { Prototype } from "@/lib/types";
 import { isSharedLocalPreview } from "@/lib/coverPlaceholder";
 
@@ -79,6 +81,7 @@ export function PrototypeCard({
   const [opening, setOpening] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [actionError, setActionError] = useState("");
+  const [publishSuccess, setPublishSuccess] = useState("");
   const [linkCopied, setLinkCopied] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
   const [pathCopied, setPathCopied] = useState(false);
@@ -128,6 +131,8 @@ export function PrototypeCard({
 
     setPublishing(true);
     setActionError("");
+    setPublishSuccess("");
+    setTeamShareHint("");
     try {
       try {
         localStorage.setItem(OPENLAB_USER_KEY, publishUsername.trim().toLowerCase());
@@ -146,11 +151,20 @@ export function PrototypeCard({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Publish failed");
       setSshPassword("");
-      if (typeof data.teamShareHint === "string") {
+      const url =
+        typeof data.previewUrl === "string" && data.previewUrl
+          ? data.previewUrl
+          : expectedLiveUrl;
+      setPublishSuccess(
+        url
+          ? `Published successfully. Live at ${url}${data.commentsInjected ? " · Shared comments enabled on the live page." : ""}`
+          : "Published successfully.",
+      );      if (typeof data.teamShareHint === "string") {
         setTeamShareHint(data.teamShareHint);
       }
       onRefresh();
     } catch (err) {
+      setPublishSuccess("");
       setActionError(err instanceof Error ? err.message : "Publish failed");
     } finally {
       setPublishing(false);
@@ -272,9 +286,31 @@ export function PrototypeCard({
           {prototype.description || "No description yet."}
         </p>
 
-        <p className="text-sm text-zinc-300">
-          By <span className="font-medium text-white">{authorLabel(prototype, isOwn)}</span>
-        </p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm text-zinc-300">
+            By <span className="font-medium text-white">{authorLabel(prototype, isOwn)}</span>
+          </p>
+          <WatchToggle prototypeId={prototype.id} variant="icon" />
+        </div>
+
+        {showOwnerTools && (
+          <CommentsEnabledToggle
+            prototypeId={prototype.id}
+            enabled={prototype.commentsEnabled !== false}
+            liveSiteId={
+              publishUsername && prototype.slug
+                ? `~${publishUsername}/${prototype.slug}`
+                : undefined
+            }
+            onUpdated={onRefresh}
+            onHint={setTeamShareHint}
+            onError={setActionError}
+          />
+        )}
+
+        {!showOwnerTools && prototype.commentsEnabled === false && (
+          <p className="text-xs text-zinc-500">Comments off on the live page</p>
+        )}
 
         {isPublished && liveUrl && (
           <div className="flex items-center gap-1">
@@ -355,6 +391,11 @@ export function PrototypeCard({
         )}
 
         {actionError && <p className="text-xs text-red-300">{actionError}</p>}
+        {publishSuccess && (
+          <p className="rounded-md bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200" role="status" aria-live="polite">
+            {publishSuccess}
+          </p>
+        )}
         {teamShareHint && <p className="text-xs text-emerald-300/90">{teamShareHint}</p>}
 
         {showOwnerTools && (

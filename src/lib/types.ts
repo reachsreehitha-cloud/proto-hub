@@ -23,6 +23,16 @@ export interface Prototype {
   localPort?: number;
   /** Shared team-registry entry (no local Desktop folder). */
   fromRegistry?: boolean;
+  /**
+   * Emails watching this prototype for comment notifications.
+   * Author is auto-added on create; commenters auto-watch; anyone can unsubscribe.
+   */
+  watchers?: string[];
+  /**
+   * When false, live ux.netapp.com page hides the shared comment overlay.
+   * Default is on. Toggle from Proto Hub or the comment inbox.
+   */
+  commentsEnabled?: boolean;
 }
 
 export interface Comment {

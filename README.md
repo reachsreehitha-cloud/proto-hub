@@ -2,15 +2,33 @@
 
 Hackathon tool for NetApp UX: create Blueprint prototypes, build in Cursor or Claude, publish to ux.netapp.com, share links with the team.
 
+## One command for the team (demo)
+
+Needs Node 20+, git, and GitHub access to this private repo (ask to be added as a collaborator).
+
+```bash
+npx --yes github:reachsreehitha-cloud/proto-hub
+```
+
+That will:
+
+1. Install Proto Hub into `~/ProtoHub`
+2. Put **Proto Hub** in `~/Applications` (drag it to your Dock once)
+3. Start the app and open [http://localhost:3000](http://localhost:3000)
+
+Next time: click **Proto Hub** in your Dock, or run the same `npx` command again.
+
+**Need for Publish:** VPN/Zscaler, NetApp SSO password (not Mac password).
+
 ## How multi-user works (hackathon)
 
 | What | Works for everyone? | How |
 |------|---------------------|-----|
 | **Team gallery** (browse / open / copy live links) | Yes | Shared `data/team-registry.json` + GitHub. Everyone's Proto Hub loads it. |
-| **Create new / drafts / Publish** | On each person's Mac | Clone and run locally. Needs Desktop, VPN, SSO password. |
+| **Create new / drafts / Publish** | On each person's Mac | One `npx` command (or clone). Needs Desktop, VPN, SSO password. |
 | **Hosting Proto Hub on ux.netapp.com** | Browse-only at best | OpenLab is static. Create/Publish need a local (or future IT-hosted) Node app. |
 
-## Clone and run
+## Clone and run (manual)
 
 ```bash
 git clone https://github.com/reachsreehitha-cloud/proto-hub.git
@@ -20,8 +38,6 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
-
-**Need:** Node 20+, VPN/Zscaler for Publish to OpenLab, NetApp SSO password for Publish (not Mac password).
 
 The Blueprint starter lives in `template/` (including dependencies) so **Create new** works after clone without a separate Hackathon folder.
 

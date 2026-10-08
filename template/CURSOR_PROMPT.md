@@ -1,18 +1,19 @@
-# Build your prototype
+# Build your prototype (Cursor or Claude)
 
-Paste this into Cursor after the template scaffolds:
+Blueprint is already installed in `blueprint-app`.
 
-```bash
-Use what you see in @node_modules/@netapp/blueprint/dist/agent/docs/ai-layout-guidance.md to create a starter layout as a React + TypeScript project.
+**Paste this if the agent is not using Blueprint:**
 
-Use the Blueprint MCP to verify components, usage, and properties (https://ux.netapp.com/blueprint/mcp)
-
-Use Blueprint color tokens, icons, library components, and styles wherever you can. Avoid creating new assets when a Blueprint equivalent exists.
+```
+Use ONLY @netapp/blueprint components (BpButton, BpAppShell, BpHeader, BpStack, BpText, BpCard, etc.).
+Read blueprint-app/node_modules/@netapp/blueprint/dist/agent/docs/ai-layout-guidance.md first.
+Do not use shadcn, MUI, plain custom CSS layouts, or invent new design systems.
+Implement in blueprint-app/src with React + TypeScript. Keep hash routes (#/home).
 ```
 
 Then describe what you want to build in plain language.
 
 When ready to publish:
-1. Run `npm run dev` and verify at http://localhost:5173
-2. Open Proto Hub and publish with your preview URL
-3. Share the review link with teammates
+1. In `blueprint-app`, run `npm run dev` and check http://localhost:5173
+2. Open Proto Hub → Publish
+3. Share the ux.netapp.com link
