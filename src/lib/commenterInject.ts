@@ -103,7 +103,7 @@ export async function registerSiteAdmin(opts: {
 }): Promise<void> {
   const base = (opts.commenterBaseUrl || getCommenterBaseUrl()).replace(/\/$/, "");
   if (!base || !opts.siteId || !opts.ldap) return;
-  const headers = {
+  const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...commenterInternalHeaders(),
   };

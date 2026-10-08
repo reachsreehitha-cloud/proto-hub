@@ -27,6 +27,11 @@ let serverProc = null;
 let startingServer = null;
 
 app.setName("Proto Hub");
+// Prevent macOS/Electron from thinking the window is occluded (kills mouse clicks)
+app.commandLine.appendSwitch(
+  "disable-features",
+  "CalculateNativeWinOcclusion,MacWebContentsOcclusion",
+);
 if (process.platform === "darwin") {
   app.setAboutPanelOptions({
     applicationName: "Proto Hub",
@@ -101,21 +106,57 @@ function killStaleServer() {
   }
 }
 
+function hasProductionBuild() {
+  return fs.existsSync(path.join(HUB_DIR, ".next", "BUILD_ID"));
+}
+
+function runNpm(args) {
+  const npm = resolveNpm();
+  const result = spawnSync(npm, args, {
+    cwd: HUB_DIR,
+    encoding: "utf8",
+    env: process.env,
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      `${npm} ${args.join(" ")} failed:\n${(result.stderr || result.stdout || "").slice(0, 800)}`,
+    );
+  }
+}
+
 async function ensureServer() {
+  if (await isServerUp()) return;
   if (startingServer) return startingServer;
 
   startingServer = (async () => {
-    // Always restart from this install’s Proto Hub folder
     killStaleServer();
-    await new Promise((r) => setTimeout(r, 400));
+    await new Promise((r) => setTimeout(r, 500));
 
-    log("Starting Proto Hub server from", HUB_DIR);
     const npm = resolveNpm();
-    const env = { ...process.env, PORT: String(PORT) };
-    serverProc = spawn(npm, ["run", "dev", "--", "--port", String(PORT)], {
+    const logPath = path.join(process.env.HOME || "/tmp", "Library", "Logs", "proto-hub.log");
+    fs.mkdirSync(path.dirname(logPath), { recursive: true });
+    const out = fs.openSync(logPath, "a");
+
+    // Prefer production server. Turbopack `next dev` often freezes clicks inside Electron.
+    // Bind 127.0.0.1 so Electron and health checks hit the same address.
+    let args = ["run", "start", "--", "--hostname", "127.0.0.1", "--port", String(PORT)];
+    let env = { ...process.env, PORT: String(PORT), NODE_ENV: "production" };
+    try {
+      if (!hasProductionBuild()) {
+        log("Building Proto Hub (one-time, ~1–2 min)…");
+        runNpm(["run", "build"]);
+      }
+    } catch (err) {
+      log("Production build failed, falling back to webpack next:", err instanceof Error ? err.message : err);
+      args = ["run", "dev", "--", "--webpack", "--hostname", "127.0.0.1", "--port", String(PORT)];
+      env = { ...process.env, PORT: String(PORT) };
+    }
+
+    log("Starting Proto Hub server from", HUB_DIR, args.join(" "));
+    serverProc = spawn(npm, args, {
       cwd: HUB_DIR,
       env,
-      stdio: "ignore",
+      stdio: ["ignore", out, out],
       detached: false,
     });
     serverProc.on("exit", (code) => {
@@ -157,15 +198,23 @@ function createWindow() {
     minHeight: 640,
     title: "Proto Hub",
     show: false,
-    titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 16, y: 16 },
+    // Default title bar — hiddenInset overlays have broken click hit-testing in Electron
     backgroundColor: "#0a0a0b",
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: true,
+      sandbox: false,
+      backgroundThrottling: false,
     },
   });
+
+  win.webContents.on("console-message", (_e, level, message) => {
+    if (level >= 2) log("renderer:", message);
+  });
+  win.webContents.on("did-fail-load", (_e, code, desc, url) => {
+    log("did-fail-load", code, desc, url);
+  });
+  win.setIgnoreMouseEvents(false);
 
   win.on("close", (e) => {
     // Closing the window keeps the app alive in Dock + menu bar
@@ -192,10 +241,8 @@ async function showApp() {
     tray?.setToolTip("Proto Hub — starting…");
     await ensureServer();
     if (!win) createWindow();
-    const current = win.webContents.getURL();
-    if (!current || !current.startsWith(URL)) {
-      await win.loadURL(URL);
-    }
+    // Always load fresh — avoids a frozen Next.js dev page stuck without hydration
+    await win.loadURL(URL);
     if (win.isMinimized()) win.restore();
     win.show();
     win.focus();

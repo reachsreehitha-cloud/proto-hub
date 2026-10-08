@@ -104,9 +104,13 @@ export function PrototypeCover({
   const showCustom = status?.mode === "custom" && status.coverImage;
   const liveUrl =
     status?.mode === "auto" && status.reachable && status.url ? status.url : null;
+  // Live iframes steal mouse clicks inside the Electron shell — use static covers there.
+  const isElectron =
+    typeof navigator !== "undefined" && /electron/i.test(navigator.userAgent);
   // Allow localhost only when this prototype has its own port (reachable check already scoped)
   const showLive = Boolean(
-    liveUrl &&
+    !isElectron &&
+      liveUrl &&
       (isPublished
         ? !isSharedLocalPreview(liveUrl)
         : status?.mode === "auto" && status.isLocal && status.reachable),

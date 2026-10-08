@@ -222,6 +222,7 @@ export function openInEditor(folderPath: string, editor: EditorChoice): boolean 
         }
       }
     }
+    return false;
   } catch {
     return false;
   }

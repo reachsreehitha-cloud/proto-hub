@@ -92,7 +92,8 @@ function friendlySshError(detail: string, username?: string): string {
   }
   const trimmed = stripBanner(detail);
   if (trimmed) return trimmed;
-  return `SSH upload failed. Check VPN and confirm \`ssh ${target}\` works in Terminal.`;
+  const user = username || "your-id";
+  return `SSH upload failed. Check VPN and confirm \`ssh ${user}@${SSH_HOST}\` works in Terminal.`;
 }
 
 /** Build via scripts/build-blueprint-app.mjs → project/dist/ (same as OpenLab). */

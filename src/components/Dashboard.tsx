@@ -72,10 +72,13 @@ export function Dashboard() {
   }, [prototypes, teamGallery, user]);
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top,rgba(139,92,246,0.18),transparent_35%),radial-gradient(circle_at_80%_20%,rgba(34,211,238,0.12),transparent_25%)]" />
+    <div className="relative z-0 min-h-screen bg-[#050505] text-white">
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(circle_at_top,rgba(139,92,246,0.18),transparent_35%),radial-gradient(circle_at_80%_20%,rgba(34,211,238,0.12),transparent_25%)]"
+      />
 
-      <header className="relative mx-auto flex max-w-7xl items-center justify-between px-6 py-6">
+      <header className="relative z-10 mx-auto flex max-w-7xl items-center justify-between px-6 py-6">
         <div>
           <p className="text-xs uppercase tracking-[0.35em] text-zinc-500">NetApp UX</p>
           <h1 className="text-2xl font-semibold">Proto Hub</h1>
@@ -94,7 +97,7 @@ export function Dashboard() {
         </div>
       </header>
 
-      <main className="relative mx-auto max-w-7xl space-y-8 px-6 pb-20">
+      <main className="relative z-10 mx-auto max-w-7xl space-y-8 px-6 pb-20">
         <section className="pt-4">
           <h2 className="max-w-3xl text-5xl font-medium tracking-tight text-white md:text-6xl">
             Start here. Build anywhere.
