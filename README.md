@@ -13,12 +13,19 @@ npx --yes github:reachsreehitha-cloud/proto-hub
 That will:
 
 1. Install Proto Hub
-2. Put a **menu-bar app** next to Wi‑Fi (top-right of the screen)
-3. Open at login so it stays there
+2. Put a **teal icon** in the menu bar (near Wi‑Fi) and pin **Proto Hub** to the Dock
+3. Open the app window and set it to start at login
 
-Click the Proto Hub icon in the menu bar to open the app window. No browser. No typing localhost.
+**If the menu bar is crowded and you do not see the icon:**
 
-Right-click the icon → **Quit Proto Hub** when you want it gone.
+| How | What to do |
+|-----|------------|
+| Dock | Click **Proto Hub** (pinned on install) |
+| Spotlight | `⌘Space` → type **Proto Hub** → Enter |
+| Finder | `~/Applications` → **Proto Hub** |
+| Menu bar overflow | Click `»` on the right of the menu bar |
+
+No browser. No typing localhost. Right-click the menu-bar icon (or Dock icon) → **Quit Proto Hub** to stop it.
 
 **Need for Publish:** VPN/Zscaler, NetApp SSO password (not Mac password).
 

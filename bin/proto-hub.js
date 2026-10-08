@@ -183,8 +183,9 @@ fi
 ELECTRON_APP="${electronApp}"
 MENUBAR="${MENUBAR_DIR}"
 
-# Already running? Just activate via open — Electron single instance is soft; kill duplicates lightly
-if pgrep -f "electron.*menubar/main.js" >/dev/null 2>&1; then
+# If already running, bring it forward (Dock / second open)
+if pgrep -f "$MENUBAR" >/dev/null 2>&1; then
+  osascript -e 'tell application "System Events" to set frontmost of first process whose name contains "Electron" to true' >/dev/null 2>&1 || true
   exit 0
 fi
 
@@ -215,9 +216,11 @@ exec "$ELECTRON_APP/Contents/MacOS/Electron" "$MENUBAR" "$@"
   <key>CFBundleShortVersionString</key>
   <string>1.0</string>
   <key>LSUIElement</key>
-  <true/>
+  <false/>
   <key>CFBundleIconFile</key>
   <string>AppIcon</string>
+  <key>CFBundleDisplayName</key>
+  <string>Proto Hub</string>
 </dict>
 </plist>
 `;
@@ -231,6 +234,27 @@ exec "$ELECTRON_APP/Contents/MacOS/Electron" "$MENUBAR" "$@"
   } catch {
     // optional
   }
+
+  // Pin to Dock so a crowded menu bar is never the only way to find it
+  pinToDock();
+}
+
+function pinToDock() {
+  if (runQuiet("which", ["dockutil"]).status === 0) {
+    runQuiet("dockutil", ["--add", APP_PATH, "--label", APP_NAME, "--replacing", APP_NAME]);
+    log("Pinned Proto Hub to your Dock");
+    return;
+  }
+
+  const check = runQuiet("defaults", ["read", "com.apple.dock", "persistent-apps"]);
+  if (check.status === 0 && check.stdout && /Proto Hub|com\.netapp\.ux\.proto-hub/i.test(check.stdout)) {
+    log("Proto Hub already in Dock");
+    return;
+  }
+  const tile = `<dict><key>tile-data</key><dict><key>file-data</key><dict><key>_CFURLString</key><string>file://${APP_PATH}/</string><key>_CFURLStringType</key><integer>15</integer></dict><key>file-label</key><string>Proto Hub</string></dict></dict>`;
+  runQuiet("defaults", ["write", "com.apple.dock", "persistent-apps", "-array-add", tile]);
+  runQuiet("killall", ["Dock"]);
+  log("Pinned Proto Hub to your Dock (Spotlight: ⌘Space → Proto Hub)");
 }
 
 function addLoginItem() {
@@ -257,10 +281,16 @@ function launchApp() {
   runQuiet("pkill", ["-f", "Proto Hub.app/Contents/MacOS/Proto Hub"]);
   runQuiet("pkill", ["-f", "electron.*menubar/main.js"]);
 
-  log("Launching Proto Hub into your menu bar (next to Wi‑Fi)…");
+  log("Launching Proto Hub…");
   run("open", ["-a", APP_PATH]);
-  log("Look up-right near Wi‑Fi for the Proto Hub icon. Click it to open.");
-  log("Right-click the icon → Quit Proto Hub when you want it gone.");
+  log("");
+  log("How to find it (even if the menu bar is full):");
+  log("  1. Dock — teal Proto Hub icon (pinned on install)");
+  log("  2. Menu bar — teal circle near Wi‑Fi (may hide in » overflow)");
+  log("  3. Spotlight — press ⌘Space, type Proto Hub, Enter");
+  log("  4. Finder → Applications → Proto Hub");
+  log("");
+  log("A window should open now. Closing it keeps Proto Hub running.");
 }
 
 async function main() {
