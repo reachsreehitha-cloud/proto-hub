@@ -127,8 +127,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           siteId,
           liveUpdated: false,
           needsRepublish: true,
-          error: message,
-          hint: `${message} Proto Hub saved your choice. Enter password and try again, or Republish.`,
+          hint: `Saved in Proto Hub. Republish to apply on the live link. (${message})`,
         }, { status: 200 });
       }
     }
@@ -159,8 +158,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           needsRepublish: true,
           syncOk: sync.ok,
           hint: body.commentsEnabled
-            ? "Comments on in Proto Hub. Enter your password on the card (or Republish) to show the bubble on the live link."
-            : "Comments off in Proto Hub. Enter your password on the card (or Republish) to hide the bubble on the live link.",
+            ? "Saved. Republish once to show the comment bubble on the live link."
+            : "Saved. Republish once to hide the comment bubble on the live link.",
         });
       }
     }

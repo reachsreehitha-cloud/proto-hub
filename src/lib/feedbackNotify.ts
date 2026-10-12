@@ -172,14 +172,6 @@ end tell
   return result.ok;
 }
 
-function revealInFinder(folder: string) {
-  try {
-    execFileSync("open", [folder], { timeout: 5000, stdio: "ignore" });
-  } catch {
-    // ignore
-  }
-}
-
 /**
  * Deliver feedback when SMTP is not set up (common on designer Macs).
  * Screenshots are staged, attached to Outlook/Mail, and kept in feedback-inbox.
@@ -192,8 +184,6 @@ export function deliverFeedbackLocally(options: {
   screenshotFiles?: string[];
   smtpAttempted: boolean;
   smtpSent: boolean;
-  /** When true (default), open the screenshots folder in Finder on this Mac */
-  revealFolder?: boolean;
 }): FeedbackDelivery {
   const { inboxFile, bodyFile, inboxDir, stagedShots } = writeInboxCopy({
     to: options.to,
@@ -214,9 +204,7 @@ export function deliverFeedbackLocally(options: {
     stagedShots.length > 0 ? ` · ${stagedShots.length} screenshot${stagedShots.length === 1 ? "" : "s"}` : "";
   macNotification("Proto Hub feedback", `${preview}${notifyExtra}`);
 
-  if (options.revealFolder !== false && stagedShots.length > 0) {
-    revealInFinder(path.join(inboxDir, "screenshots"));
-  }
+  // Do not open Finder here. It steals focus and can dismiss/close the Electron window.
 
   if (options.smtpSent) {
     return {
