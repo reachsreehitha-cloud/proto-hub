@@ -9,6 +9,10 @@ type Props = {
   enabled?: boolean;
   /** /~user/slug/ used to sync the live comment service immediately */
   liveSiteId?: string;
+  /** When set with username, toggle pushes HTML meta to the live site */
+  password?: string;
+  username?: string;
+  isPublished?: boolean;
   onUpdated?: () => void;
   onHint?: (hint: string) => void;
   onError?: (message: string) => void;
@@ -21,6 +25,9 @@ export function CommentsEnabledToggle({
   prototypeId,
   enabled = true,
   liveSiteId,
+  password,
+  username,
+  isPublished = false,
   onUpdated,
   onHint,
   onError,
@@ -45,11 +52,20 @@ export function CommentsEnabledToggle({
         body: JSON.stringify({
           commentsEnabled: next,
           liveSiteId: liveSiteId || undefined,
+          password: password?.trim() || undefined,
+          username: username?.trim() || undefined,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not update comments");
       if (typeof data.hint === "string") onHint?.(data.hint);
+      if (typeof data.error === "string" && data.needsRepublish) {
+        onError?.(data.error);
+      } else if (isPublished && data.needsRepublish && !password?.trim()) {
+        onError?.(
+          "Enter your NetApp password on this card, then toggle again to update the live page.",
+        );
+      }
       onUpdated?.();
     } catch (err) {
       setOptimistic(null);
@@ -59,14 +75,21 @@ export function CommentsEnabledToggle({
     }
   }
 
-  const tip = isOn
-    ? "Commenter bubble on for everyone on the live ux.netapp.com link. Click to turn it off."
-    : "Commenter bubble off on the live link. Click to turn it on, then publish or republish.";
+  const tip = isPublished
+    ? isOn
+      ? "Comment bubble on for the live link. Click to turn it off (needs password on the card to update ux.netapp.com)."
+      : "Comment bubble off. Click to turn it on (needs password on the card to update ux.netapp.com)."
+    : isOn
+      ? "Comments will be on when you publish."
+      : "Comments will stay off when you publish.";
 
   return (
     <div className="flex items-center justify-between gap-3">
       <div className="min-w-0">
         <p className="text-sm text-zinc-200">Comments on live page</p>
+        {isPublished && !password?.trim() ? (
+          <p className="text-xs text-amber-200/80">Password needed to update the live link</p>
+        ) : null}
       </div>
       <Tip label={tip} side="bottom">
         <button

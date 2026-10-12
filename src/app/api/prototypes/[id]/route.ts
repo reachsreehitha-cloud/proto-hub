@@ -67,9 +67,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   if (typeof body.commentsEnabled === "boolean") {
-    const { registerSiteAdmin, setLiveCommentsEnabled, getCommenterBaseUrl } = await import(
-      "@/lib/commenterInject"
-    );
+    const { registerSiteAdmin, setLiveCommentsEnabled, getCommenterBaseUrl, injectCommenterScript } =
+      await import("@/lib/commenterInject");
+    const { pushCommentsSettingToUx } = await import("@/lib/publish");
+    const path = await import("node:path");
+    const fs = await import("node:fs");
+
     const updated = updatePrototype(prototype.id, { commentsEnabled: body.commentsEnabled });
 
     let siteId = "";
@@ -81,11 +84,59 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (match) siteId = `~${match[1]}/${match[2]}`;
     }
 
+    // Keep local dist meta in sync for the next publish even if we cannot push now.
+    try {
+      const localDist = path.join(prototype.folderPath, "dist");
+      if (fs.existsSync(path.join(localDist, "index.html"))) {
+        injectCommenterScript(localDist, getCommenterBaseUrl(), {
+          enabled: body.commentsEnabled,
+        });
+      }
+    } catch {
+      // best-effort
+    }
+
+    const password = typeof body.password === "string" ? body.password.trim() : "";
+    const usernameRaw =
+      typeof body.username === "string" && body.username.trim()
+        ? body.username.trim()
+        : user.accountId;
+
+    // Published site: push HTML meta to ux.netapp.com so the bubble actually hides/shows.
+    if (prototype.status === "published" && password && siteId) {
+      try {
+        await pushCommentsSettingToUx(
+          prototype.folderPath,
+          prototype.name,
+          { username: usernameRaw, password },
+          prototype.slug,
+          body.commentsEnabled,
+        );
+        return NextResponse.json({
+          prototype: updated,
+          siteId,
+          liveUpdated: true,
+          hint: body.commentsEnabled
+            ? "Comments on. Live page updated. Hard-refresh the link if the bubble still shows."
+            : "Comments off. Live page updated. Hard-refresh the link (⌘⇧R) if the bubble still shows.",
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Could not update live page";
+        return NextResponse.json({
+          prototype: updated,
+          siteId,
+          liveUpdated: false,
+          needsRepublish: true,
+          error: message,
+          hint: `${message} Proto Hub saved your choice. Enter password and try again, or Republish.`,
+        }, { status: 200 });
+      }
+    }
+
     if (siteId) {
       const ownerLdap = siteId.startsWith("~")
         ? siteId.slice(1).split("/")[0]
         : user.accountId;
-      // Only the Proto Hub prototype owner reaches this PATCH (isOwnPrototype).
       await registerSiteAdmin({
         commenterBaseUrl: getCommenterBaseUrl(),
         siteId,
@@ -93,20 +144,33 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         email: user.email,
         name: user.name,
       });
-      await setLiveCommentsEnabled({
+      const sync = await setLiveCommentsEnabled({
         commenterBaseUrl: getCommenterBaseUrl(),
         siteId,
         enabled: body.commentsEnabled,
         ownerLdap,
       });
+
+      if (prototype.status === "published") {
+        return NextResponse.json({
+          prototype: updated,
+          siteId,
+          liveUpdated: false,
+          needsRepublish: true,
+          syncOk: sync.ok,
+          hint: body.commentsEnabled
+            ? "Comments on in Proto Hub. Enter your password on the card (or Republish) to show the bubble on the live link."
+            : "Comments off in Proto Hub. Enter your password on the card (or Republish) to hide the bubble on the live link.",
+        });
+      }
     }
 
     return NextResponse.json({
       prototype: updated,
       siteId: siteId || null,
       hint: body.commentsEnabled
-        ? "Live comments on. Only you (signed-in owner) can change this."
-        : "Live comments off. Only you (signed-in owner) can turn them back on.",
+        ? "Comments on. They will be included when you publish."
+        : "Comments off. They will stay off when you publish.",
     });
   }
 

@@ -380,3 +380,70 @@ export async function publishPrototypeToUx(
     commentsInjected: inject.injected,
   };
 }
+
+/**
+ * After Comments on/off is toggled for an already-published site, rebuild and
+ * re-upload so live index.html gets ux-commenter meta on/off (Apache still
+ * injects overlay.js; the meta tells it whether to show the bubble).
+ */
+export async function pushCommentsSettingToUx(
+  folderPath: string,
+  name: string,
+  credentials: PublishCredentials,
+  appSlug: string,
+  commentsEnabled: boolean,
+): Promise<{ previewUrl: string; commentsInjected: boolean; siteId: string }> {
+  if (!credentials?.password?.trim()) {
+    throw new Error("Enter your NetApp SSO password to update the live page.");
+  }
+  if (!credentials.username?.trim()) {
+    throw new Error("Enter your OpenLab username to update the live page.");
+  }
+
+  const username = normalizeUsername(credentials.username);
+  const appName = (appSlug?.trim() || slugify(name) || "prototype").toLowerCase();
+  const remoteAppDir = `${REMOTE_BASE}/${appName}`;
+  const previewUrl = `https://${BROWSE_HOST}/~${username}/${appName}/`;
+  const siteId = `~${username}/${appName}`;
+  const commenterBase = getCommenterBaseUrl();
+
+  const distDir = buildDist(folderPath);
+  const inject = injectCommenterScript(distDir, commenterBase, { enabled: commentsEnabled });
+
+  await registerSiteAdmin({
+    commenterBaseUrl: commenterBase,
+    siteId,
+    ldap: username,
+    email: `${username}@netapp.com`,
+    name: username,
+  });
+  const sync = await setLiveCommentsEnabled({
+    commenterBaseUrl: commenterBase,
+    siteId,
+    enabled: commentsEnabled,
+    ownerLdap: username,
+  });
+  if (!sync.ok) {
+    console.warn("[ux-commenter] settings API sync failed; still uploading HTML meta:", sync.detail);
+  }
+
+  let session: SshSession | null = null;
+  try {
+    session = openSessionWithPassword(username, credentials.password.trim());
+    sshRun(session, `mkdir -p ${remoteAppDir}`);
+    uploadDist(session, distDir, remoteAppDir);
+    try {
+      sshRun(session, `chmod 0711 ~ && chmod 0755 ${REMOTE_BASE} && chmod -R 0755 ${remoteAppDir}`);
+    } catch {
+      // best-effort
+    }
+  } finally {
+    if (session) cleanupSession(session);
+  }
+
+  return {
+    previewUrl,
+    commentsInjected: inject.injected,
+    siteId,
+  };
+}

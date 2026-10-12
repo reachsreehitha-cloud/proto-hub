@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CreatePrototypeModal } from "./CreatePrototypeModal";
-import { FeedbackReportFab } from "./FeedbackReport";
 import { HelpPanel } from "./HelpPanel";
 import { HelpCircleIcon } from "./icons";
 import { PrototypeCard } from "./PrototypeCard";
@@ -250,7 +249,6 @@ export function Dashboard() {
       </main>
 
       <CreatePrototypeModal open={modalOpen} onClose={() => setModalOpen(false)} onCreated={load} />
-      <FeedbackReportFab />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { AppChrome } from "@/components/AppChrome";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -20,7 +21,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="min-h-full bg-[#050505] font-sans text-white">{children}</body>
+      <body className="min-h-full bg-[#050505] font-sans text-white">
+        <AppChrome>{children}</AppChrome>
+      </body>
     </html>
   );
 }

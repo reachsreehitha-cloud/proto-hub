@@ -560,6 +560,9 @@ export function PrototypeCard({
               <CommentsEnabledToggle
                 prototypeId={prototype.id}
                 enabled={prototype.commentsEnabled !== false}
+                isPublished={isPublished}
+                password={sshPassword}
+                username={publishUsername}
                 liveSiteId={
                   isPublished && publishUsername && prototype.slug
                     ? `~${publishUsername}/${prototype.slug}`
@@ -586,6 +589,7 @@ export function PrototypeCard({
           <CommentsEnabledToggle
             prototypeId={prototype.id}
             enabled={prototype.commentsEnabled !== false}
+            isPublished={isPublished}
             liveSiteId={
               publishUsername && prototype.slug
                 ? `~${publishUsername}/${prototype.slug}`

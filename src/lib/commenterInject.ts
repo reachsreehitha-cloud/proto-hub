@@ -126,6 +126,12 @@ export async function registerSiteAdmin(opts: {
   }
 }
 
+export type LiveCommentsSyncResult = {
+  ok: boolean;
+  status?: number;
+  detail?: string;
+};
+
 /**
  * Tell the shared commenter service this live site should show/hide the overlay.
  * Only the registered owner (internal token + matching ldap, or signed-in admin).
@@ -136,9 +142,11 @@ export async function setLiveCommentsEnabled(opts: {
   enabled: boolean;
   ownerLdap?: string;
   cookie?: string;
-}): Promise<void> {
+}): Promise<LiveCommentsSyncResult> {
   const base = (opts.commenterBaseUrl || getCommenterBaseUrl()).replace(/\/$/, "");
-  if (!base || !opts.siteId) return;
+  if (!base || !opts.siteId) {
+    return { ok: false, detail: "Missing commenter URL or site id" };
+  }
 
   const url = `${base}/api/sites/settings?site=${encodeURIComponent(opts.siteId)}`;
   try {
@@ -146,15 +154,33 @@ export async function setLiveCommentsEnabled(opts: {
       "Content-Type": "application/json",
       ...commenterInternalHeaders(),
     };
+    if (!headers["X-Commenter-Internal"]) {
+      return {
+        ok: false,
+        detail: "COMMENTER_INTERNAL_TOKEN is not set (or not accepted). Republish to apply on the live page.",
+      };
+    }
     if (opts.cookie) headers.Cookie = opts.cookie;
     if (opts.ownerLdap) headers["X-Commenter-Owner"] = opts.ownerLdap.trim().toLowerCase();
-    await fetch(url, {
+    const res = await fetch(url, {
       method: "PUT",
       headers,
       body: JSON.stringify({ enabled: opts.enabled }),
     });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      const detail =
+        res.status === 401 || res.status === 403
+          ? "Commenter service rejected the toggle (auth). Republish with Comments off to hide the live bubble."
+          : `Commenter sync failed (${res.status}). ${body.slice(0, 120)}`;
+      console.warn("[ux-commenter] setLiveCommentsEnabled:", res.status, body.slice(0, 200));
+      return { ok: false, status: res.status, detail };
+    }
+    return { ok: true, status: res.status };
   } catch (err) {
+    const detail = err instanceof Error ? err.message : "Commenter unreachable";
     console.warn("[ux-commenter] could not sync comments enabled:", err);
+    return { ok: false, detail };
   }
 }
 
