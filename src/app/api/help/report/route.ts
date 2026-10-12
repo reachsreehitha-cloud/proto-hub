@@ -54,6 +54,7 @@ export async function POST(request: Request) {
   const dataDir = path.join(process.cwd(), "data");
   const file = path.join(dataDir, "issue-reports.json");
   const shotsDir = path.join(dataDir, "issue-screenshots", report.id);
+  const screenshotFiles: string[] = [];
 
   try {
     if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
@@ -69,8 +70,12 @@ export async function POST(request: Request) {
             : match[1].includes("webp")
               ? "webp"
               : "img";
-        const safe = shot.name.replace(/[^\w.\-]+/g, "_").slice(0, 80) || `shot-${i + 1}.${ext}`;
-        fs.writeFileSync(path.join(shotsDir, safe.endsWith(ext) ? safe : `${safe}.${ext}`), Buffer.from(match[2], "base64"));
+        const safe =
+          shot.name.replace(/[^\w.\-]+/g, "_").slice(0, 80) || `shot-${i + 1}.${ext}`;
+        const filename = safe.endsWith(`.${ext}`) ? safe : `${safe}.${ext}`;
+        const dest = path.join(shotsDir, filename);
+        fs.writeFileSync(dest, Buffer.from(match[2], "base64"));
+        screenshotFiles.push(dest);
       });
     }
 
@@ -78,7 +83,11 @@ export async function POST(request: Request) {
       ? (JSON.parse(fs.readFileSync(file, "utf8")) as unknown[])
       : [];
     const list = Array.isArray(existing) ? existing : [];
-    list.unshift(report);
+    list.unshift({
+      ...report,
+      screenshotFiles,
+      screenshotsDir: screenshotFiles.length ? shotsDir : "",
+    });
     fs.writeFileSync(file, `${JSON.stringify(list.slice(0, 200), null, 2)}\n`);
   } catch (err) {
     console.error("Could not write issue report:", err);
@@ -94,7 +103,7 @@ export async function POST(request: Request) {
       fromEmail: report.fromEmail,
       accountId: report.accountId,
       screenshotNames: report.screenshotNames,
-      screenshotPaths: screenshots.length ? shotsDir : "",
+      screenshotFiles,
     },
   });
 
@@ -102,8 +111,12 @@ export async function POST(request: Request) {
     ok: true,
     emailSent: delivery.emailSent,
     channel: delivery.channel,
+    inboxDir: delivery.inboxDir,
+    screenshotCount: screenshotFiles.length,
     message: delivery.emailSent
-      ? `Thanks. Sent to ${HELP_REPORT_EMAIL}.`
+      ? `Thanks. Sent to ${HELP_REPORT_EMAIL}${
+          screenshotFiles.length ? ` with ${screenshotFiles.length} screenshot(s).` : "."
+        }`
       : `Thanks. Saved. ${delivery.detail}`,
   });
 }

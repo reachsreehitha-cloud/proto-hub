@@ -27,6 +27,7 @@ async function sendOne(options: {
   subject: string;
   text: string;
   html: string;
+  attachments?: { filename: string; path: string }[];
 }): Promise<{ attempted: boolean; sent: boolean }> {
   if (!options.to.includes("@")) return { attempted: false, sent: false };
   try {
@@ -37,6 +38,7 @@ async function sendOne(options: {
         subject: options.subject,
         text: options.text,
         html: options.html,
+        attachments: options.attachments,
       });
       return { attempted: true, sent: true };
     }
@@ -95,20 +97,20 @@ export async function sendHelpIssueReport(options: {
     fromEmail: string;
     accountId?: string;
     screenshotNames?: string[];
-    screenshotPaths?: string;
+    /** Absolute paths to screenshot image files on disk */
+    screenshotFiles?: string[];
   };
-}): Promise<{ emailSent: boolean; detail: string; channel: string }> {
+}): Promise<{ emailSent: boolean; detail: string; channel: string; inboxDir?: string }> {
   const { deliverFeedbackLocally } = await import("./feedbackNotify");
   const { report, to } = options;
+  const shotFiles = (report.screenshotFiles || []).filter(Boolean);
   const firstLine =
     report.whatHappened.split("\n").find((l) => l.trim())?.trim().slice(0, 80) || "Feedback";
   const subject = `[Proto Hub feedback] ${firstLine}`;
-  const shots =
-    report.screenshotNames && report.screenshotNames.length > 0
-      ? `Screenshots (${report.screenshotNames.length}): ${report.screenshotNames.join(", ")}${
-          report.screenshotPaths ? `\nSaved under: ${report.screenshotPaths}` : ""
-        }`
-      : "No screenshots";
+  const shotsNote =
+    shotFiles.length > 0
+      ? `Screenshots (${shotFiles.length}) attached to this email.`
+      : "No screenshots.";
 
   const text = [
     `From: ${report.fromName} <${report.fromEmail}>`,
@@ -117,7 +119,7 @@ export async function sendHelpIssueReport(options: {
     "",
     report.whatHappened,
     "",
-    shots,
+    shotsNote,
     "",
     `Report id: ${report.id}`,
   ]
@@ -133,9 +135,13 @@ export async function sendHelpIssueReport(options: {
         report.accountId ? ` · ${report.accountId}` : ""
       }</p>
       <pre style="white-space:pre-wrap;font-family:inherit;color:#444">${report.whatHappened}</pre>
-      <p style="color:#666;font-size:13px">${shots.replace(/\n/g, "<br/>")}</p>
+      <p style="color:#666;font-size:13px">${shotsNote}</p>
       <p style="color:#888;font-size:12px">${report.id} · ${report.at}</p>
     `,
+    attachments: shotFiles.map((filePath) => ({
+      filename: filePath.split(/[\\/]/).pop() || "screenshot.png",
+      path: filePath,
+    })),
   });
 
   const local = deliverFeedbackLocally({
@@ -143,6 +149,7 @@ export async function sendHelpIssueReport(options: {
     subject,
     text,
     id: report.id,
+    screenshotFiles: shotFiles,
     smtpAttempted: smtp.attempted,
     smtpSent: smtp.sent,
   });
@@ -151,6 +158,7 @@ export async function sendHelpIssueReport(options: {
     emailSent: local.emailSent,
     detail: local.detail,
     channel: local.channel,
+    inboxDir: local.inboxDir,
   };
 }
 
