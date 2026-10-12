@@ -27,8 +27,8 @@ async function sendOne(options: {
   subject: string;
   text: string;
   html: string;
-}) {
-  if (!options.to.includes("@")) return;
+}): Promise<{ attempted: boolean; sent: boolean }> {
+  if (!options.to.includes("@")) return { attempted: false, sent: false };
   try {
     if (process.env.SMTP_USER) {
       await transporter.sendMail({
@@ -38,13 +38,15 @@ async function sendOne(options: {
         text: options.text,
         html: options.html,
       });
-    } else {
-      console.log(
-        `[proto-hub email preview] To: ${options.to}\nSubject: ${options.subject}\n${options.text}`,
-      );
+      return { attempted: true, sent: true };
     }
+    console.log(
+      `[proto-hub email preview] To: ${options.to}\nSubject: ${options.subject}\n${options.text}`,
+    );
+    return { attempted: false, sent: false };
   } catch (error) {
     console.error("Failed to send email:", error);
+    return { attempted: true, sent: false };
   }
 }
 
@@ -82,7 +84,7 @@ export async function sendMentionEmails(
   }
 }
 
-/** Help → Report feedback (logs to console when SMTP is unset). */
+/** Help → Report feedback. Uses SMTP when set; otherwise Outlook/Mail on this Mac. */
 export async function sendHelpIssueReport(options: {
   to: string;
   report: {
@@ -95,7 +97,8 @@ export async function sendHelpIssueReport(options: {
     screenshotNames?: string[];
     screenshotPaths?: string;
   };
-}) {
+}): Promise<{ emailSent: boolean; detail: string; channel: string }> {
+  const { deliverFeedbackLocally } = await import("./feedbackNotify");
   const { report, to } = options;
   const firstLine =
     report.whatHappened.split("\n").find((l) => l.trim())?.trim().slice(0, 80) || "Feedback";
@@ -121,7 +124,7 @@ export async function sendHelpIssueReport(options: {
     .filter(Boolean)
     .join("\n");
 
-  await sendOne({
+  const smtp = await sendOne({
     to,
     subject,
     text,
@@ -134,6 +137,21 @@ export async function sendHelpIssueReport(options: {
       <p style="color:#888;font-size:12px">${report.id} · ${report.at}</p>
     `,
   });
+
+  const local = deliverFeedbackLocally({
+    to,
+    subject,
+    text,
+    id: report.id,
+    smtpAttempted: smtp.attempted,
+    smtpSent: smtp.sent,
+  });
+
+  return {
+    emailSent: local.emailSent,
+    detail: local.detail,
+    channel: local.channel,
+  };
 }
 
 /** Notify people watching the prototype (skips commenter + already-@mentioned). */

@@ -84,7 +84,7 @@ export async function POST(request: Request) {
     console.error("Could not write issue report:", err);
   }
 
-  await sendHelpIssueReport({
+  const delivery = await sendHelpIssueReport({
     to: HELP_REPORT_EMAIL,
     report: {
       id: report.id,
@@ -100,6 +100,10 @@ export async function POST(request: Request) {
 
   return NextResponse.json({
     ok: true,
-    message: "Thanks. We’ll take a look.",
+    emailSent: delivery.emailSent,
+    channel: delivery.channel,
+    message: delivery.emailSent
+      ? `Thanks. Sent to ${HELP_REPORT_EMAIL}.`
+      : `Thanks. Saved. ${delivery.detail}`,
   });
 }
