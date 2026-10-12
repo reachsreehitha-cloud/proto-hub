@@ -67,7 +67,6 @@ export function CommentsEnabledToggle({
     <div className="flex items-center justify-between gap-3">
       <div className="min-w-0">
         <p className="text-sm text-zinc-200">Comments on live page</p>
-        <p className="text-xs text-zinc-500">Commenter bubble for everyone on the published link</p>
       </div>
       <Tip label={tip} side="bottom">
         <button
