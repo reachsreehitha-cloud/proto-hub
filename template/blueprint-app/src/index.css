@@ -9,3 +9,59 @@ body {
   font-family: var(--font-family, Inter, system-ui, sans-serif);
   background: var(--background-content, #f5f7fa);
 }
+
+/*
+  Service nav must fill the viewport column (Console shells), not shrink to nav item
+  count. BpMainRegion is min-height:100vh-header, but its BpInline child defaults to
+  content height + align-items:center. so the rail stops after the last item.
+*/
+.bp-main-region {
+  display: flex;
+  flex-direction: column;
+}
+
+.bp-main-region > .bp-inline {
+  flex: 1 1 auto;
+  align-items: stretch !important;
+  width: 100%;
+  min-height: calc(100vh - var(--bp-shell-header-h, 0px));
+}
+
+.bp-main-region > .bp-inline > .bp-service-nav {
+  align-self: stretch;
+  min-height: 100%;
+}
+
+/* Force Simple Filters dropdowns into one horizontal row (Figma 86422:42107).
+   Blueprint sets .bp-dropdown { width: 100% } which stacks every filter. */
+.bp-simple-filters__controls > .bp-dropdown,
+.bp-simple-filters__controls .bp-dropdown {
+  width: auto !important;
+  max-width: 280px !important;
+  flex: 0 1 auto !important;
+}
+
+/*
+  Console list/inventory pages: fill the content column beside the service nav.
+  Blueprint's standalone Notification defaults to max-width 792px (component gallery);
+  page-level banners should span the content region.
+*/
+.bp-content-region[data-width="full"] {
+  width: 100%;
+  max-width: none;
+}
+
+.bp-content-region[data-width="full"] > .bp-stack {
+  width: 100%;
+}
+
+.bp-content-region[data-width="full"] > .bp-stack > .bp-notification {
+  width: 100%;
+  max-width: none;
+}
+
+.bp-content-region[data-width="full"] > .bp-stack > .bp-card,
+.bp-content-region[data-width="full"] > .bp-stack > .bp-simple-filters,
+.bp-content-region[data-width="full"] > .bp-stack > .bp-table {
+  width: 100%;
+}

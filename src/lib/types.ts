@@ -1,5 +1,6 @@
 export type CommentStatus = "open" | "resolved";
-export type EditorChoice = "cursor" | "claude";
+/** Claude/"cloud" editor disabled for now. Restore `"claude"` when re-enabling. */
+export type EditorChoice = "cursor"; // | "claude"
 export type CoverMode = "auto" | "custom";
 
 export interface Prototype {
@@ -23,6 +24,8 @@ export interface Prototype {
   localPort?: number;
   /** Shared team-registry entry (no local Desktop folder). */
   fromRegistry?: boolean;
+  /** Computed at list time. Desktop folder / blueprint-app was deleted. */
+  folderMissing?: boolean;
   /**
    * Emails watching this prototype for comment notifications.
    * Author is auto-added on create; commenters auto-watch; anyone can unsubscribe.

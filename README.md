@@ -1,19 +1,30 @@
 # Proto Hub
 
-Hackathon tool for NetApp UX: create Blueprint prototypes, build in Cursor or Claude, publish to ux.netapp.com, share links with the team.
+Hackathon tool for NetApp UX: create Blueprint prototypes, build in Cursor, publish to ux.netapp.com, share links with the team.
 
-## One command for the team (demo)
+## One command for the team (Team Proto Hub)
 
 Needs macOS, Node 20+, git, and GitHub access to this private repo (ask to be added as a collaborator).
 
+Paste this in Slack / email (names stay in the message, not inside the command):
+
 ```bash
+# Team Proto Hub
 npx --yes github:reachsreehitha-cloud/proto-hub
+```
+
+**Smoke-test on your Mac without touching your real install:**
+
+```bash
+cd /path/to/proto-hub
+./scripts/dry-run-fresh-mac.sh
+# later: rm -rf ~/ProtoHub-dry-run
 ```
 
 That will:
 
 1. Install Proto Hub
-2. Put a **teal icon** in the menu bar (near Wi‑Fi) and pin **Proto Hub** to the Dock
+2. Put a **Proto Hub** icon in the menu bar (near Wi‑Fi) and pin **Proto Hub** to the Dock
 3. Open the app window and set it to start at login
 
 **If the menu bar is crowded and you do not see the icon:**

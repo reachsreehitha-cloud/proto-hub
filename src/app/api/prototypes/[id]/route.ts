@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser, isOwnPrototype } from "@/lib/auth";
-import { deletePrototype, getPrototype, getPrototypes, publishPrototype, updatePrototype } from "@/lib/store";
+import {
+  deletePrototype,
+  getPrototype,
+  getPrototypes,
+  markFolderUnlinked,
+  publishPrototype,
+  updatePrototype,
+} from "@/lib/store";
 
 function slugify(value: string): string {
   return value
@@ -106,22 +113,65 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });
 }
 
-export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const user = getCurrentUser();
   const prototype = getPrototype(id);
+
+  const url = new URL(request.url);
+  const deleteFolder =
+    url.searchParams.get("deleteFolder") === "1" ||
+    url.searchParams.get("deleteFolder") === "true";
+
+  // Gallery-only registry card with no local draft. Remove listing if owned
   if (!prototype) {
-    return NextResponse.json({ error: "Prototype not found" }, { status: 404 });
+    const { readLocalRegistry, removeFromLocalRegistry } = await import("@/lib/teamRegistry");
+    const entry = readLocalRegistry().find((e) => e.id === id);
+    if (!entry || entry.authorEmail.toLowerCase() !== user.email.toLowerCase()) {
+      return NextResponse.json({ error: "Prototype not found" }, { status: 404 });
+    }
+    removeFromLocalRegistry({ id: entry.id });
+    return NextResponse.json({ ok: true, listingRemoved: true, folderDeleted: false });
   }
 
-  const user = getCurrentUser();
   if (!isOwnPrototype(prototype, user)) {
     return NextResponse.json({ error: "Only the owner can delete this prototype." }, { status: 403 });
   }
 
+  let folderResult: { ok: boolean; message?: string } | undefined;
+  if (deleteFolder && prototype.folderPath && !prototype.fromRegistry) {
+    const { movePrototypeFolderToTrash, stopPreviewOnPort } = await import("@/lib/deleteFolder");
+    stopPreviewOnPort(prototype.localPort);
+    folderResult = movePrototypeFolderToTrash(prototype.folderPath);
+    if (!folderResult.ok) {
+      return NextResponse.json(
+        { error: folderResult.message || "Could not delete Desktop folder." },
+        { status: 500 },
+      );
+    }
+  }
+
+  // Always remove from Proto Hub list; optional Desktop folder via checkbox
+  if (!deleteFolder) {
+    markFolderUnlinked(prototype.folderPath);
+  }
   const removed = deletePrototype(prototype.id);
   if (!removed) {
     return NextResponse.json({ error: "Prototype not found" }, { status: 404 });
   }
 
-  return NextResponse.json({ ok: true });
+  const { removeFromLocalRegistry } = await import("@/lib/teamRegistry");
+  removeFromLocalRegistry({
+    id: `registry-${prototype.authorEmail.split("@")[0]}-${prototype.slug}`,
+    previewUrl: prototype.previewUrl,
+    authorEmail: prototype.authorEmail,
+    slug: prototype.slug,
+  });
+
+  return NextResponse.json({
+    ok: true,
+    folderDeleted: Boolean(deleteFolder && folderResult?.ok),
+    listingRemoved: true,
+    folderMessage: folderResult?.message,
+  });
 }

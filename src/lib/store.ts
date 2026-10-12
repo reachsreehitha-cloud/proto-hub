@@ -1,12 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { getDesktopPath } from "./paths";
 import { allocateLocalPort, localPreviewUrlForPort, writeDevPort } from "./preview";
 import type { Comment, CreateCommentInput, CreatePrototypeInput, Prototype } from "./types";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const PROTOTYPES_FILE = path.join(DATA_DIR, "prototypes.json");
 const COMMENTS_FILE = path.join(DATA_DIR, "comments.json");
+/** Written when user removes a card but keeps the Desktop folder. Skip auto-restore. */
+export const UNLINKED_MARKER = ".proto-hub-unlinked";
 
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -72,7 +75,131 @@ export function getPrototypes(): Prototype[] {
 }
 
 export function getPrototype(id: string): Prototype | undefined {
-  return getPrototypes().find((p) => p.id === id || p.slug === id);
+  const all = getPrototypes();
+  const direct = all.find((p) => p.id === id || p.slug === id);
+  if (direct) return direct;
+
+  // Team gallery cards use registry-{ldap}-{slug}. Map back to a local draft/publish.
+  if (id.startsWith("registry-")) {
+    const byExpected = all.find(
+      (p) => `registry-${p.authorEmail.split("@")[0]}-${p.slug}` === id,
+    );
+    if (byExpected) return byExpected;
+  }
+  return undefined;
+}
+
+function isPrototypeFolder(folderPath: string): boolean {
+  return fs.existsSync(path.join(folderPath, "blueprint-app", "package.json"));
+}
+
+export function markFolderUnlinked(folderPath?: string | null) {
+  if (!folderPath || !fs.existsSync(folderPath)) return;
+  try {
+    fs.writeFileSync(path.join(folderPath, UNLINKED_MARKER), `${new Date().toISOString()}\n`);
+  } catch {
+    // best-effort
+  }
+}
+
+export function clearFolderUnlinked(folderPath?: string | null) {
+  if (!folderPath) return;
+  try {
+    fs.rmSync(path.join(folderPath, UNLINKED_MARKER), { force: true });
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Re-add Desktop Blueprint folders that are missing from the hub list
+ * (e.g. Registry was overwritten). Skips folders marked unlinked on purpose.
+ */
+export function recoverOrphanedDesktopPrototypes(author: {
+  name: string;
+  email: string;
+}): Prototype[] {
+  const desktop = getDesktopPath();
+  if (!fs.existsSync(desktop)) return [];
+
+  const existing = getPrototypes();
+  const tracked = new Set(
+    existing
+      .map((p) => {
+        try {
+          return p.folderPath && fs.existsSync(p.folderPath)
+            ? fs.realpathSync(p.folderPath)
+            : path.resolve(p.folderPath || "");
+        } catch {
+          return path.resolve(p.folderPath || "");
+        }
+      })
+      .filter(Boolean),
+  );
+
+  const recovered: Prototype[] = [];
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(desktop, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+    const folderPath = path.join(desktop, entry.name);
+    if (!isPrototypeFolder(folderPath)) continue;
+    if (fs.existsSync(path.join(folderPath, UNLINKED_MARKER))) continue;
+
+    let real = folderPath;
+    try {
+      real = fs.realpathSync(folderPath);
+    } catch {
+      // keep folderPath
+    }
+    if (tracked.has(real)) continue;
+
+    const localPort = allocateLocalPort([...existing, ...recovered]);
+    try {
+      writeDevPort(folderPath, localPort);
+    } catch {
+      // still list it
+    }
+
+    const baseSlug = slugify(entry.name) || "prototype";
+    let slug = baseSlug;
+    let counter = 1;
+    const taken = new Set([...existing, ...recovered].map((p) => p.slug));
+    while (taken.has(slug)) slug = `${baseSlug}-${counter++}`;
+
+    const now = new Date().toISOString();
+    const email = author.email.trim().toLowerCase();
+    const prototype: Prototype = {
+      id: randomUUID(),
+      name: entry.name,
+      slug,
+      description: "",
+      author: author.name,
+      authorEmail: email,
+      previewUrl: "",
+      folderPath,
+      editor: "cursor",
+      status: "draft",
+      coverMode: "auto",
+      localPort,
+      localPreviewUrl: localPreviewUrlForPort(localPort),
+      watchers: email.includes("@") ? [email] : [],
+      createdAt: now,
+      updatedAt: now,
+    };
+    recovered.push(prototype);
+    tracked.add(real);
+  }
+
+  if (recovered.length) {
+    writeJson(PROTOTYPES_FILE, [...recovered, ...existing]);
+  }
+  return recovered;
 }
 
 export function removeCoverImage(prototype: Prototype) {
@@ -132,6 +259,7 @@ export function createPrototypeRecord(
     updatedAt: now,
   };
 
+  clearFolderUnlinked(prototype.folderPath);
   savePrototype(prototype);
   return prototype;
 }

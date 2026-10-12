@@ -1,5 +1,5 @@
 /**
- * Proto Hub — menu bar + Dock so people can always find it.
+ * Proto Hub. Menu bar + Dock so people can always find it.
  * Crowded menu bars hide icons; Dock + Spotlight + notification cover that.
  */
 const {
@@ -18,13 +18,25 @@ const http = require("node:http");
 const path = require("node:path");
 
 const PORT = Number(process.env.PROTO_HUB_PORT || 3000);
-const HUB_DIR = process.env.PROTO_HUB_DIR || path.resolve(__dirname, "..");
+// Resolve through the Resources/app symlink so HUB_DIR is always ~/ProtoHub,
+// not …/Proto Hub.app/Contents/Resources.
+const MENUBAR_DIR = (() => {
+  try {
+    return fs.realpathSync(__dirname);
+  } catch {
+    return __dirname;
+  }
+})();
+const HUB_DIR = process.env.PROTO_HUB_DIR || path.resolve(MENUBAR_DIR, "..");
 const URL = `http://127.0.0.1:${PORT}`;
 
 let tray = null;
 let win = null;
 let serverProc = null;
 let startingServer = null;
+let showingApp = null;
+let loadRetryTimer = null;
+let loadFailCount = 0;
 
 app.setName("Proto Hub");
 // Prevent macOS/Electron from thinking the window is occluded (kills mouse clicks)
@@ -143,7 +155,7 @@ async function ensureServer() {
     let env = { ...process.env, PORT: String(PORT), NODE_ENV: "production" };
     try {
       if (!hasProductionBuild()) {
-        log("Building Proto Hub (one-time, ~1–2 min)…");
+        log("Building Proto Hub (one-time, ~1-2 min)…");
         runNpm(["run", "build"]);
       }
     } catch (err) {
@@ -173,24 +185,64 @@ async function ensureServer() {
 }
 
 function trayIcon() {
-  // Colored icon so it still reads in a crowded / overflow menu bar
-  const color = path.join(__dirname, "assets", "TrayIcon.png");
-  if (fs.existsSync(color)) {
-    return nativeImage.createFromPath(color);
+  // Template glyph matches Wi‑Fi / Control Center (system-tinted, correct optical size).
+  // Prefer @2x then let Electron scale; fall back to colored mark if templates missing.
+  const retina = path.join(MENUBAR_DIR, "assets", "IconTemplate@2x.png");
+  const asset = path.join(MENUBAR_DIR, "assets", "IconTemplate.png");
+  const color2x = path.join(MENUBAR_DIR, "assets", "TrayIcon@2x.png");
+  const color = path.join(MENUBAR_DIR, "assets", "TrayIcon.png");
+
+  let img = null;
+  if (fs.existsSync(retina)) {
+    img = nativeImage.createFromPath(retina);
+    img.setTemplateImage(true);
+  } else if (fs.existsSync(asset)) {
+    img = nativeImage.createFromPath(asset);
+    img.setTemplateImage(true);
+  } else if (fs.existsSync(color2x)) {
+    img = nativeImage.createFromPath(color2x);
+  } else if (fs.existsSync(color)) {
+    img = nativeImage.createFromPath(color);
   }
-  const asset = path.join(__dirname, "assets", "IconTemplate.png");
-  const img = nativeImage.createFromPath(asset);
-  img.setTemplateImage(true);
+
+  if (!img || img.isEmpty()) return nativeImage.createEmpty();
+  // Hard-cap menu-bar size so a dense PNG never looks larger than peers
+  const size = img.getSize();
+  if (size.width > 44 || size.height > 44) {
+    return img.resize({ width: 22, height: 22, quality: "best" });
+  }
   return img;
 }
 
 function dockIcon() {
-  const icon = path.join(__dirname, "assets", "AppIcon.png");
-  if (fs.existsSync(icon)) return nativeImage.createFromPath(icon);
+  // Prefer PNG. NativeImage + .icns is flaky; empty images leave Electron's default cursor logo.
+  const candidates = [
+    path.join(MENUBAR_DIR, "assets", "AppIcon.png"),
+    path.join(MENUBAR_DIR, "assets", "AppIcon.icns"),
+    path.join(process.resourcesPath || "", "AppIcon.png"),
+    path.join(process.resourcesPath || "", "electron.icns"),
+  ];
+  for (const file of candidates) {
+    if (!file || !fs.existsSync(file)) continue;
+    const img = nativeImage.createFromPath(file);
+    if (!img.isEmpty()) {
+      // Dock likes ~128-512; oversized masters are fine
+      return img;
+    }
+  }
   return trayIcon();
 }
 
+function applyDockIcon() {
+  if (process.platform !== "darwin" || !app.dock) return;
+  const icon = dockIcon();
+  if (!icon.isEmpty()) {
+    app.dock.setIcon(icon);
+  }
+}
+
 function createWindow() {
+  const icon = dockIcon();
   win = new BrowserWindow({
     width: 1280,
     height: 860,
@@ -198,7 +250,8 @@ function createWindow() {
     minHeight: 640,
     title: "Proto Hub",
     show: false,
-    // Default title bar — hiddenInset overlays have broken click hit-testing in Electron
+    icon: icon.isEmpty() ? undefined : icon,
+    // Default title bar. HiddenInset overlays have broken click hit-testing in Electron
     backgroundColor: "#0a0a0b",
     webPreferences: {
       nodeIntegration: false,
@@ -211,8 +264,23 @@ function createWindow() {
   win.webContents.on("console-message", (_e, level, message) => {
     if (level >= 2) log("renderer:", message);
   });
-  win.webContents.on("did-fail-load", (_e, code, desc, url) => {
-    log("did-fail-load", code, desc, url);
+  // ERR_ABORTED (-3) is common when the Next server was killed mid-reload (rebuild).
+  // Retry quietly instead of leaving a blank window / scary Chromium dialog.
+  win.webContents.on("did-fail-load", (_e, code, desc, url, isMainFrame) => {
+    log("did-fail-load", code, desc, url, "main=", isMainFrame);
+    if (!isMainFrame) return;
+    loadFailCount += 1;
+    if (loadFailCount > 8) {
+      tray?.setToolTip("Proto Hub. Failed to start");
+      return;
+    }
+    if (loadRetryTimer) clearTimeout(loadRetryTimer);
+    loadRetryTimer = setTimeout(() => {
+      void showApp({ forceReload: true, fromFail: true });
+    }, 700);
+  });
+  win.webContents.on("did-finish-load", () => {
+    loadFailCount = 0;
   });
   win.setIgnoreMouseEvents(false);
 
@@ -224,7 +292,7 @@ function createWindow() {
       if (Notification.isSupported()) {
         new Notification({
           title: "Proto Hub is still running",
-          body: "Click the teal icon near Wi‑Fi, or Proto Hub in the Dock, to open it again.",
+          body: "Click the Proto Hub icon near Wi‑Fi, or Proto Hub in the Dock, to open it again.",
         }).show();
       }
     }
@@ -236,31 +304,64 @@ function createWindow() {
   });
 }
 
-async function showApp() {
-  try {
-    tray?.setToolTip("Proto Hub — starting…");
-    await ensureServer();
-    if (!win) createWindow();
-    // Always load fresh — avoids a frozen Next.js dev page stuck without hydration
-    await win.loadURL(URL);
-    if (win.isMinimized()) win.restore();
-    win.show();
-    win.focus();
-    if (process.platform === "darwin" && app.dock) app.dock.show();
-    tray?.setToolTip("Proto Hub — click to open");
-  } catch (err) {
-    log("Failed to open", err);
-    tray?.setToolTip("Proto Hub — failed to start");
-    dialog.showErrorBox(
-      "Proto Hub",
-      err instanceof Error ? err.message : "Could not start Proto Hub",
-    );
-  }
+async function showApp(options = {}) {
+  // Serialize opens so Dock + tray + activate don't race-kill :3000 mid-load.
+  if (showingApp) return showingApp;
+
+  showingApp = (async () => {
+    const { forceReload = false, fromFail = false } = options;
+    try {
+      tray?.setToolTip("Proto Hub. Starting…");
+      await ensureServer();
+      // Confirm the hub actually answers before navigating (avoids ERR_ABORTED).
+      for (let i = 0; i < 15; i++) {
+        if (await isServerUp()) break;
+        await new Promise((r) => setTimeout(r, 300));
+      }
+      if (!(await isServerUp())) {
+        throw new Error("Proto Hub server did not become ready on http://127.0.0.1:3000");
+      }
+
+      if (!win || win.isDestroyed()) createWindow();
+
+      const alreadyThere =
+        !forceReload &&
+        !fromFail &&
+        win.webContents.getURL().startsWith(URL) &&
+        !win.webContents.isLoading();
+
+      if (!alreadyThere) {
+        await win.loadURL(URL);
+      }
+
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+      if (process.platform === "darwin" && app.dock) app.dock.show();
+      tray?.setToolTip("Proto Hub. Click to open");
+    } catch (err) {
+      log("Failed to open", err);
+      tray?.setToolTip("Proto Hub. Failed to start");
+      // Don't stack dialogs on automatic fail-load retries
+      if (!fromFail) {
+        dialog.showErrorBox(
+          "Proto Hub",
+          err instanceof Error
+            ? err.message
+            : "Could not start Proto Hub. Quit from the menu bar and open Proto Hub again.",
+        );
+      }
+    }
+  })().finally(() => {
+    showingApp = null;
+  });
+
+  return showingApp;
 }
 
 function createTray() {
   tray = new Tray(trayIcon());
-  tray.setToolTip("Proto Hub — click to open");
+  tray.setToolTip("Proto Hub. Click to open");
 
   const menu = Menu.buildFromTemplate([
     {
@@ -300,14 +401,17 @@ function notifyReady() {
   if (!Notification.isSupported()) return;
   new Notification({
     title: "Proto Hub is ready",
-    body: "Teal icon near Wi‑Fi, or Proto Hub in the Dock. Spotlight: ⌘Space → Proto Hub",
+    body: "Proto Hub icon near Wi‑Fi, or Proto Hub in the Dock. Spotlight: ⌘Space → Proto Hub",
   }).show();
 }
 
 app.whenReady().then(() => {
   // Keep Dock icon so people can find/pin it when the menu bar is full
   if (process.platform === "darwin" && app.dock) {
-    app.dock.setIcon(dockIcon());
+    applyDockIcon();
+    // Re-apply after a beat. MacOS sometimes resets to Electron default on first paint
+    setTimeout(applyDockIcon, 300);
+    setTimeout(applyDockIcon, 1500);
     app.dock.setMenu(
       Menu.buildFromTemplate([
         {
@@ -331,7 +435,10 @@ app.whenReady().then(() => {
   createTray();
 
   // Always open the window on launch so installers know it worked
-  void showApp().then(notifyReady);
+  void showApp().then(() => {
+    applyDockIcon();
+    notifyReady();
+  });
 
   app.on("activate", () => {
     // Clicking Dock icon on macOS

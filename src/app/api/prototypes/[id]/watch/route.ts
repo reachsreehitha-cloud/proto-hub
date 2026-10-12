@@ -24,7 +24,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   });
 }
 
-/** Start watching — get emails when someone comments. */
+/** Start watching. Get emails when someone comments. */
 export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const prototype = getPrototype(id);
@@ -45,7 +45,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   });
 }
 
-/** Unsubscribe — stop comment emails for this prototype. */
+/** Unsubscribe. Stop comment emails for this prototype. */
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const prototype = getPrototype(id);

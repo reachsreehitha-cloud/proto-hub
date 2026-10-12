@@ -29,17 +29,21 @@ export function ReviewWorkspace({ prototypeId }: { prototypeId: string }) {
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState("");
   const [publishSuccess, setPublishSuccess] = useState("");
+  const [myEmail, setMyEmail] = useState("");
   const frameRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
-    const [prototypeRes, commentsRes] = await Promise.all([
+    const [prototypeRes, commentsRes, meRes] = await Promise.all([
       fetch(`/api/prototypes/${prototypeId}`),
       fetch(`/api/prototypes/${prototypeId}/comments`),
+      fetch("/api/me"),
     ]);
     const prototypeData = await prototypeRes.json();
     const commentsData = await commentsRes.json();
+    const meData = await meRes.json();
     setPrototype(prototypeData.prototype);
     setComments(commentsData.comments ?? []);
+    setMyEmail(String(meData.user?.email || "").toLowerCase());
     const proto = prototypeData.prototype;
     setPreviewUrl(proto?.previewUrl || "http://localhost:5173/#/home");
     if (proto?.status === "published") {
@@ -166,7 +170,14 @@ export function ReviewWorkspace({ prototypeId }: { prototypeId: string }) {
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <WatchToggle prototypeId={prototype.id} variant="button" />
+            <WatchToggle
+              prototypeId={prototype.id}
+              variant="button"
+              hideForOwner={
+                Boolean(myEmail) &&
+                prototype.authorEmail.toLowerCase() === myEmail
+              }
+            />
             <Button variant="outline" onClick={publishPrototype} disabled={publishing}>
               {publishing ? "Publishing…" : prototype.status === "published" ? "Republish" : "Publish"}
             </Button>
@@ -315,7 +326,7 @@ export function ReviewWorkspace({ prototypeId }: { prototypeId: string }) {
           <Textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
-            placeholder="Leave feedback. Use @email@netapp.com to notify. Watching also emails you (Unsubscribe in the header)."
+            placeholder="Leave feedback. Use @email@netapp.com to notify. Teammates can opt into email alerts for their own inbox."
             rows={4}
           />
           <Button className="mt-3 w-full" onClick={submitComment} disabled={!body.trim()}>

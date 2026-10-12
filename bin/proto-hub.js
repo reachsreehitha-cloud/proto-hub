@@ -1,9 +1,12 @@
 #!/usr/bin/env node
 /**
- * Install Proto Hub as a macOS menu-bar app (next to Wi‑Fi).
+ * Install Team Proto Hub as a macOS menu-bar app (next to Wi‑Fi).
  *
+ *   # Team Proto Hub
  *   npx --yes github:reachsreehitha-cloud/proto-hub
+ *
  *   node bin/proto-hub.js
+ *   node bin/proto-hub.js --dry-run   # sandbox install (does not touch ~/ProtoHub)
  *
  * Does NOT open a browser to localhost. Click the menu-bar icon to open the app.
  */
@@ -13,9 +16,11 @@ const os = require("node:os");
 const path = require("node:path");
 
 const REPO = "https://github.com/reachsreehitha-cloud/proto-hub.git";
-const APP_NAME = "Proto Hub";
-const APPLICATIONS_DIR = path.join(os.homedir(), "Applications");
-const APP_PATH = path.join(APPLICATIONS_DIR, `${APP_NAME}.app`);
+const ARGS = new Set(process.argv.slice(2));
+const DRY_RUN = ARGS.has("--dry-run") || process.env.PROTO_HUB_DRY_RUN === "1";
+
+/** Display name in Dock / logs. Override with PROTO_HUB_APP_NAME. */
+const APP_NAME = process.env.PROTO_HUB_APP_NAME || (DRY_RUN ? "Team Proto Hub (dry-run)" : "Proto Hub");
 
 function log(msg) {
   console.log(`\x1b[36m▸\x1b[0m ${msg}`);
@@ -41,12 +46,27 @@ function runQuiet(cmd, args, opts = {}) {
   return spawnSync(cmd, args, { encoding: "utf8", ...opts });
 }
 
-/** One stable install path so the menu-bar app and Create/Publish share the same data. */
+/**
+ * One stable install path so the menu-bar app and Create/Publish share the same data.
+ * PROTO_HUB_DIR overrides. --dry-run uses ~/ProtoHub-dry-run (never ~/ProtoHub).
+ */
 function getHubDir() {
+  if (process.env.PROTO_HUB_DIR) return path.resolve(process.env.PROTO_HUB_DIR);
+  if (DRY_RUN) return path.join(os.homedir(), "ProtoHub-dry-run");
   return path.join(os.homedir(), "ProtoHub");
 }
 
+function getApplicationsDir() {
+  if (process.env.PROTO_HUB_APPLICATIONS_DIR) {
+    return path.resolve(process.env.PROTO_HUB_APPLICATIONS_DIR);
+  }
+  if (DRY_RUN) return path.join(getHubDir(), "Applications");
+  return path.join(os.homedir(), "Applications");
+}
+
 const HUB_DIR = getHubDir();
+const APPLICATIONS_DIR = getApplicationsDir();
+const APP_PATH = path.join(APPLICATIONS_DIR, `${APP_NAME}.app`);
 const MENUBAR_DIR = path.join(HUB_DIR, "menubar");
 const SOURCE_DIR = path.resolve(__dirname, "..");
 
@@ -176,10 +196,6 @@ function electronBinary() {
 
 function writeMacApp() {
   log(`Installing ${APP_NAME} into ~/Applications (menu bar)`);
-  const macOsDir = path.join(APP_PATH, "Contents", "MacOS");
-  const resourcesDir = path.join(APP_PATH, "Contents", "Resources");
-  fs.mkdirSync(macOsDir, { recursive: true });
-  fs.mkdirSync(resourcesDir, { recursive: true });
 
   const electronApp = path.join(
     MENUBAR_DIR,
@@ -189,10 +205,44 @@ function writeMacApp() {
     "Electron.app",
   );
   if (!fs.existsSync(electronApp)) {
-    fail("Electron.app missing — try PROTO_HUB_FORCE_INSTALL=1 and run again");
+    fail("Electron.app missing. Try PROTO_HUB_FORCE_INSTALL=1 and run again");
   }
 
-  const launcher = path.join(macOsDir, APP_NAME);
+  const icnsSrc = path.join(MENUBAR_DIR, "assets", "AppIcon.icns");
+  const pngSrc = path.join(MENUBAR_DIR, "assets", "AppIcon.png");
+  if (!fs.existsSync(icnsSrc) && !fs.existsSync(pngSrc)) {
+    fail("AppIcon missing under menubar/assets. Regenerate icons first");
+  }
+
+  // Real Electron.app clone (not a bash wrapper). A wrapper launches Electron.app
+  // and the Dock shows Electron's default gray cursor logo instead of Proto Hub.
+  fs.rmSync(APP_PATH, { recursive: true, force: true });
+  run("rsync", ["-a", `${electronApp}/`, `${APP_PATH}/`]);
+
+  const resourcesDir = path.join(APP_PATH, "Contents", "Resources");
+  const macOsDir = path.join(APP_PATH, "Contents", "MacOS");
+
+  // Bake logo into the places macOS + Electron look for Dock icons
+  if (fs.existsSync(icnsSrc)) {
+    fs.copyFileSync(icnsSrc, path.join(resourcesDir, "electron.icns"));
+    fs.copyFileSync(icnsSrc, path.join(resourcesDir, "AppIcon.icns"));
+  }
+  if (fs.existsSync(pngSrc)) {
+    fs.copyFileSync(pngSrc, path.join(resourcesDir, "AppIcon.png"));
+  }
+
+  // Point the bundle at our menubar app (Electron loads Resources/app)
+  const appLink = path.join(resourcesDir, "app");
+  try {
+    fs.rmSync(appLink, { recursive: true, force: true });
+  } catch {
+    // ignore
+  }
+  fs.symlinkSync(MENUBAR_DIR, appLink);
+
+  // Env wrapper: keep Proto Hub paths, then exec the real Electron binary
+  const electronBin = path.join(macOsDir, "Electron");
+  const wrapper = path.join(macOsDir, APP_NAME);
   const script = `#!/bin/bash
 set -e
 export PROTO_HUB_DIR="${HUB_DIR}"
@@ -203,51 +253,53 @@ if [ -s "$HOME/.nvm/nvm.sh" ]; then
   . "$HOME/.nvm/nvm.sh"
 fi
 
-ELECTRON_APP="${electronApp}"
-MENUBAR="${MENUBAR_DIR}"
+APP_BUNDLE="$(cd "$(dirname "$0")/../.." && pwd)"
+ELECTRON_BIN="$APP_BUNDLE/Contents/MacOS/Electron"
 
-# If already running, bring it forward (Dock / second open)
-if pgrep -f "$MENUBAR" >/dev/null 2>&1; then
-  osascript -e 'tell application "System Events" to set frontmost of first process whose name contains "Electron" to true' >/dev/null 2>&1 || true
+# Already running. Bring Proto Hub forward
+if pgrep -f "$APP_BUNDLE/Contents/MacOS/Electron" >/dev/null 2>&1 || pgrep -f "${MENUBAR_DIR}" >/dev/null 2>&1; then
+  osascript -e 'tell application "System Events" to set frontmost of first process whose name contains "Proto Hub" or name contains "Electron" to true' >/dev/null 2>&1 || true
   exit 0
 fi
 
-exec "$ELECTRON_APP/Contents/MacOS/Electron" "$MENUBAR" "$@"
+exec "$ELECTRON_BIN" "$@"
 `;
-  fs.writeFileSync(launcher, script, { mode: 0o755 });
-
-  // Copy app icon into Resources if present
-  const iconSrc = path.join(MENUBAR_DIR, "assets", "AppIcon.png");
-  if (fs.existsSync(iconSrc)) {
-    fs.copyFileSync(iconSrc, path.join(resourcesDir, "AppIcon.png"));
+  fs.writeFileSync(wrapper, script, { mode: 0o755 });
+  // Keep Electron binary executable
+  try {
+    fs.chmodSync(electronBin, 0o755);
+  } catch {
+    // ignore
   }
 
-  const plist = `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CFBundleExecutable</key>
-  <string>${APP_NAME}</string>
-  <key>CFBundleIdentifier</key>
-  <string>com.netapp.ux.proto-hub</string>
-  <key>CFBundleName</key>
-  <string>${APP_NAME}</string>
-  <key>CFBundlePackageType</key>
-  <string>APPL</string>
-  <key>CFBundleVersion</key>
-  <string>1.0</string>
-  <key>CFBundleShortVersionString</key>
-  <string>1.0</string>
-  <key>LSUIElement</key>
-  <false/>
-  <key>CFBundleIconFile</key>
-  <string>AppIcon</string>
-  <key>CFBundleDisplayName</key>
-  <string>Proto Hub</string>
-</dict>
-</plist>
-`;
-  fs.writeFileSync(path.join(APP_PATH, "Contents", "Info.plist"), plist);
+  const plistPath = path.join(APP_PATH, "Contents", "Info.plist");
+  // Patch identity + icon on the cloned Electron plist (keeps required Electron keys)
+  try {
+    execFileSync("/usr/bin/plutil", ["-replace", "CFBundleName", "-string", APP_NAME, plistPath]);
+    execFileSync("/usr/bin/plutil", ["-replace", "CFBundleDisplayName", "-string", APP_NAME, plistPath]);
+    execFileSync(
+      "/usr/bin/plutil",
+      [
+        "-replace",
+        "CFBundleIdentifier",
+        "-string",
+        DRY_RUN ? "com.netapp.ux.proto-hub.dry-run" : "com.netapp.ux.proto-hub",
+        plistPath,
+      ],
+    );
+    execFileSync("/usr/bin/plutil", ["-replace", "CFBundleIconFile", "-string", "electron.icns", plistPath]);
+    execFileSync("/usr/bin/plutil", ["-replace", "CFBundleExecutable", "-string", APP_NAME, plistPath]);
+    execFileSync("/usr/bin/plutil", ["-replace", "CFBundleShortVersionString", "-string", "0.1.0", plistPath]);
+  } catch (err) {
+    fail(`Could not patch Proto Hub Info.plist: ${err instanceof Error ? err.message : err}`);
+  }
+
+  // Drop Finder icon cache for this bundle
+  try {
+    fs.utimesSync(APP_PATH, new Date(), new Date());
+  } catch {
+    // ignore
+  }
 
   try {
     execFileSync(
@@ -263,6 +315,10 @@ exec "$ELECTRON_APP/Contents/MacOS/Electron" "$MENUBAR" "$@"
 }
 
 function pinToDock() {
+  if (DRY_RUN) {
+    log("Dry-run: skipping Dock pin (your real Proto Hub Dock icon is untouched)");
+    return;
+  }
   if (runQuiet("which", ["dockutil"]).status === 0) {
     runQuiet("dockutil", ["--add", APP_PATH, "--label", APP_NAME, "--replacing", APP_NAME]);
     log("Pinned Proto Hub to your Dock");
@@ -281,6 +337,10 @@ function pinToDock() {
 }
 
 function addLoginItem() {
+  if (DRY_RUN) {
+    log("Dry-run: skipping Login Items (your real login items are untouched)");
+    return;
+  }
   // Open at login so it stays in the menu bar after reboot
   const script = `
 tell application "System Events"
@@ -295,60 +355,88 @@ end tell
   if (r.status === 0) {
     log("Set to open at login (stays in the menu bar)");
   } else {
-    log("Could not add login item automatically — open System Settings → General → Login Items if you want it at boot");
+    log("Could not add login item automatically - open System Settings → General → Login Items if you want it at boot");
   }
 }
 
 function launchApp() {
-  // Quit old browser-style helper if somehow still running
+  // Quit any prior Proto Hub / Electron shell so two apps don’t fight over :3000
+  // (that race shows up as ERR_ABORTED loading http://127.0.0.1:3000/).
+  runQuiet("pkill", ["-f", "Proto Hub.app/Contents/MacOS/Electron"]);
   runQuiet("pkill", ["-f", "Proto Hub.app/Contents/MacOS/Proto Hub"]);
   runQuiet("pkill", ["-f", "electron.*menubar/main.js"]);
+  runQuiet("bash", ["-lc", `lsof -ti tcp:${process.env.PROTO_HUB_PORT || 3000} | xargs kill -9 2>/dev/null || true`]);
 
-  log("Launching Proto Hub…");
-  run("open", ["-a", APP_PATH]);
+  log(`Launching ${APP_NAME}…`);
+  run("open", [APP_PATH]);
   log("");
-  log("How to find it (even if the menu bar is full):");
-  log("  1. Dock — teal Proto Hub icon (pinned on install)");
-  log("  2. Menu bar — teal circle near Wi‑Fi (may hide in » overflow)");
-  log("  3. Spotlight — press ⌘Space, type Proto Hub, Enter");
-  log("  4. Finder → Applications → Proto Hub");
-  log("");
-  log("A window should open now. Closing it keeps Proto Hub running.");
+  if (DRY_RUN) {
+    log("Dry-run sandbox app opened. Real Proto Hub is unchanged.");
+    log(`  App: ${APP_PATH}`);
+    log(`  Data: ${HUB_DIR}`);
+  } else {
+    log("How to find it (even if the menu bar is full):");
+    log("  1. Dock - Proto Hub icon (pinned on install)");
+    log("  2. Menu bar - Proto Hub mark near Wi-Fi (may hide in » overflow)");
+    log("  3. Spotlight - press ⌘Space, type Proto Hub, Enter");
+    log("  4. Finder → Applications → Proto Hub");
+    log("");
+    log("A window should open now. Closing it keeps Proto Hub running.");
+  }
 }
 
 async function main() {
-  const args = new Set(process.argv.slice(2));
-  if (args.has("--help") || args.has("-h")) {
-    console.log(`Proto Hub — menu bar app for Blueprint prototypes + live comments
+  if (ARGS.has("--help") || ARGS.has("-h")) {
+    console.log(`Team Proto Hub - menu bar app for Blueprint prototypes + live comments
 
 Usage:
+  # Team Proto Hub (what to send teammates)
   npx --yes github:reachsreehitha-cloud/proto-hub
+
   node bin/proto-hub.js
   node bin/proto-hub.js --install   # install only, do not launch
-
-Installs a menu-bar app next to Wi‑Fi. Click the icon to open Proto Hub
-in its own window (not Safari, no localhost URL bar).
+  node bin/proto-hub.js --dry-run   # sandbox under ~/ProtoHub-dry-run (safe on your Mac)
 
 Needs: macOS, Node 20+, git, GitHub access to this private repo.
 `);
     return;
   }
 
+  if (DRY_RUN) {
+    log("Team Proto Hub dry-run (fresh-Mac simulation)");
+    log(`Sandbox hub:  ${HUB_DIR}`);
+    log(`Sandbox app:  ${APP_PATH}`);
+    log("Your real ~/ProtoHub and ~/Applications/Proto Hub.app are NOT touched.");
+  } else {
+    log("Team Proto Hub install");
+  }
+
   ensureDarwin();
   ensureNode();
   ensureGit();
+  fs.mkdirSync(APPLICATIONS_DIR, { recursive: true });
   ensureHubCheckout();
   ensureEnv();
   ensureDeps();
   writeMacApp();
   addLoginItem();
 
-  if (args.has("--install")) {
-    log("Install complete. Run again without --install, or open Proto Hub from ~/Applications.");
+  if (ARGS.has("--install") || ARGS.has("--no-launch")) {
+    log("Install complete. Run again without --install, or open the app from Applications.");
+    if (DRY_RUN) {
+      log(`Dry-run app: open "${APP_PATH}"`);
+      log("Cleanup later: rm -rf ~/ProtoHub-dry-run");
+    }
     return;
   }
 
+  if (DRY_RUN) {
+    log("Dry-run: launching sandbox app only (real Proto Hub keeps running if open).");
+  }
   launchApp();
+  if (DRY_RUN) {
+    log("Cleanup when done: rm -rf ~/ProtoHub-dry-run");
+  }
 }
 
 main().catch((err) => fail(err.stack || String(err)));

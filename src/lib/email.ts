@@ -82,6 +82,60 @@ export async function sendMentionEmails(
   }
 }
 
+/** Help → Report feedback (logs to console when SMTP is unset). */
+export async function sendHelpIssueReport(options: {
+  to: string;
+  report: {
+    id: string;
+    at: string;
+    whatHappened: string;
+    fromName: string;
+    fromEmail: string;
+    accountId?: string;
+    screenshotNames?: string[];
+    screenshotPaths?: string;
+  };
+}) {
+  const { report, to } = options;
+  const firstLine =
+    report.whatHappened.split("\n").find((l) => l.trim())?.trim().slice(0, 80) || "Feedback";
+  const subject = `[Proto Hub feedback] ${firstLine}`;
+  const shots =
+    report.screenshotNames && report.screenshotNames.length > 0
+      ? `Screenshots (${report.screenshotNames.length}): ${report.screenshotNames.join(", ")}${
+          report.screenshotPaths ? `\nSaved under: ${report.screenshotPaths}` : ""
+        }`
+      : "No screenshots";
+
+  const text = [
+    `From: ${report.fromName} <${report.fromEmail}>`,
+    report.accountId ? `Account: ${report.accountId}` : "",
+    `When: ${report.at}`,
+    "",
+    report.whatHappened,
+    "",
+    shots,
+    "",
+    `Report id: ${report.id}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  await sendOne({
+    to,
+    subject,
+    text,
+    html: `
+      <p><strong>${report.fromName}</strong> &lt;${report.fromEmail}&gt;${
+        report.accountId ? ` · ${report.accountId}` : ""
+      }</p>
+      <pre style="white-space:pre-wrap;font-family:inherit;color:#444">${report.whatHappened}</pre>
+      <p style="color:#666;font-size:13px">${shots.replace(/\n/g, "<br/>")}</p>
+      <p style="color:#888;font-size:12px">${report.id} · ${report.at}</p>
+    `,
+  });
+}
+
 /** Notify people watching the prototype (skips commenter + already-@mentioned). */
 export async function sendWatcherEmails(
   prototype: Prototype,
@@ -111,7 +165,7 @@ export async function sendWatcherEmails(
     `View at: ${link}`,
     `Screen: ${comment.route}`,
     "",
-    `Unsubscribe from email updates: open the review page and click “Unsubscribe”.`,
+    `To stop comment emails to your inbox only: open the review page and click “Stop my emails”.`,
     unsubHint,
   ].join("\n");
 
@@ -126,8 +180,8 @@ export async function sendWatcherEmails(
         <p>Screen: <code>${comment.route}</code></p>
         <p><a href="${link}" style="background:#18181b;color:white;padding:10px 16px;border-radius:8px;text-decoration:none">View feedback</a></p>
         <p style="color:#888;font-size:12px">
-          You’re watching this prototype.
-          <a href="${unsubHint}">Open review → Unsubscribe</a> to stop these emails.
+          These emails go to your inbox only.
+          <a href="${unsubHint}">Open review → Stop my emails</a> if you no longer want them.
         </p>
       `,
     });

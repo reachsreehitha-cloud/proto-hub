@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CreatePrototypeModal } from "./CreatePrototypeModal";
+import { HelpPanel } from "./HelpPanel";
+import { HelpCircleIcon } from "./icons";
 import { PrototypeCard } from "./PrototypeCard";
-import { Button } from "./ui";
+import { Button, IconButton } from "./ui";
 import { isOwnPrototype, type AuthUser } from "@/lib/auth";
 import type { Prototype } from "@/lib/types";
 
@@ -12,16 +14,15 @@ type View = "team" | "my-drafts" | "my-published";
 const VIEW_META: Record<View, { label: string; description: string }> = {
   team: {
     label: "Team gallery",
-    description:
-      "Published prototypes from the shared team registry (GitHub) plus yours. Open or copy any live link.",
+    description: "Shared live prototypes. Open or copy any link.",
   },
   "my-drafts": {
     label: "My drafts",
-    description: "Your unpublished work - only on this Mac until you publish.",
+    description: "Unpublished work on this Mac.",
   },
   "my-published": {
     label: "My published",
-    description: "Prototypes you published from this Mac. Push team-registry.json so others see them too.",
+    description: "Your live prototypes on ux.netapp.com.",
   },
 };
 
@@ -30,6 +31,7 @@ export function Dashboard() {
   const [teamGallery, setTeamGallery] = useState<Prototype[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [view, setView] = useState<View>("team");
+  const [helpOpen, setHelpOpen] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
 
   const load = useCallback(async () => {
@@ -83,7 +85,7 @@ export function Dashboard() {
           <p className="text-xs uppercase tracking-[0.35em] text-zinc-500">NetApp UX</p>
           <h1 className="text-2xl font-semibold">Proto Hub</h1>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4">
           {user && (
             <p className="hidden text-sm text-zinc-500 sm:block" title={user.email}>
               {user.accountId}
@@ -93,86 +95,104 @@ export function Dashboard() {
                 )}
             </p>
           )}
+          <IconButton
+            label="Help"
+            onClick={() => setHelpOpen((open) => !open)}
+            className={helpOpen ? "bg-white/10 text-white" : ""}
+          >
+            <HelpCircleIcon className="h-5 w-5" />
+          </IconButton>
           <Button onClick={() => setModalOpen(true)}>Create new</Button>
         </div>
       </header>
 
       <main className="relative z-10 mx-auto max-w-7xl space-y-8 px-6 pb-20">
-        <section className="pt-4">
-          <h2 className="max-w-3xl text-5xl font-medium tracking-tight text-white md:text-6xl">
-            Start here. Build anywhere.
-          </h2>
-          <p className="mt-5 max-w-2xl text-lg text-zinc-400">
-            Use Cursor or Claude - your choice. Proto Hub gives you a ready folder with Blueprint installed,
-            one-click publish to ux.netapp.com, and a shareable link for your team.
-          </p>
-        </section>
-
-        <section className="grid gap-4 sm:grid-cols-2">
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-            <p className="text-sm font-medium text-white">Blueprint ready</p>
-            <p className="mt-2 text-sm text-zinc-400">
-              @netapp/blueprint@legacy is installed in every new project. No npm setup, no registry commands.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-            <p className="text-sm font-medium text-white">One-click publish</p>
-            <p className="mt-2 text-sm text-zinc-400">
-              Hit Publish - we build and deploy to ux.netapp.com. Your prototype shows up here; share the link with your team.
-            </p>
-          </div>
-        </section>
-
-        <div>
-          <div className="mb-3 flex flex-wrap gap-2">
-            {(Object.keys(VIEW_META) as View[]).map((key) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setView(key)}
-                className={`cursor-pointer rounded-full px-4 py-2 text-sm transition ${
-                  view === key ? "bg-white text-black" : "border border-white/10 text-zinc-400 hover:bg-white/5"
-                }`}
-              >
-                {VIEW_META[key].label}
-                <span className="ml-2 opacity-70">
-                  ({key === "team" ? counts.team : key === "my-drafts" ? counts.myDrafts : counts.myPublished})
-                </span>
-              </button>
-            ))}
-          </div>
-          <p className="text-sm text-zinc-500">{VIEW_META[view].description}</p>
-        </div>
-
-        {filtered.length === 0 ? (
-          <div className="rounded-3xl border border-dashed border-white/10 p-16 text-center">
-            <p className="text-xl text-zinc-300">
-              {view === "team" && "No published prototypes yet"}
-              {view === "my-drafts" && "You have no drafts"}
-              {view === "my-published" && "You haven't published anything yet"}
-            </p>
-            <p className="mt-2 text-sm text-zinc-500">
-              {view === "team"
-                ? "Publish from My drafts, then commit and push data/team-registry.json so teammates see your link here."
-                : "Create new - build in Cursor or Claude, then publish from your draft card."}
-            </p>
-            {view !== "team" && (
-              <Button className="mt-6" onClick={() => setModalOpen(true)}>Create new</Button>
-            )}
-          </div>
+        {helpOpen ? (
+          <HelpPanel />
         ) : (
-          <div className="grid items-stretch gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {filtered.map((prototype) => (
-              <PrototypeCard
-                key={prototype.id}
-                prototype={prototype}
-                isOwn={user ? isOwnPrototype(prototype, user) : false}
-                galleryMode={view === "team"}
-                accountId={user?.accountId}
-                onRefresh={load}
-              />
-            ))}
-          </div>
+          <>
+            <section className="pt-4">
+              <h2 className="max-w-3xl text-5xl font-medium tracking-tight text-white md:text-6xl">
+                Start here. Build anywhere.
+              </h2>
+              <p className="mt-5 max-w-2xl text-lg text-zinc-400">
+                Build in Cursor, then Publish to ux.netapp.com. Open Help (?) if you get stuck.
+              </p>
+            </section>
+
+            <section className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+                <p className="text-sm font-medium text-white">Blueprint ready</p>
+                <p className="mt-2 text-sm text-zinc-400">
+                  Copied into every new project. Preview starts for you. No terminal.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+                <p className="text-sm font-medium text-white">Publish to ux.netapp.com</p>
+                <p className="mt-2 text-sm text-zinc-400">
+                  Hit Publish. We deploy to ux.netapp.com. VPN + NetApp password required.
+                </p>
+              </div>
+            </section>
+
+            <div>
+              <div className="mb-3 flex flex-wrap gap-2">
+                {(Object.keys(VIEW_META) as View[]).map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setView(key)}
+                    className={`cursor-pointer rounded-full px-4 py-2 text-sm transition ${
+                      view === key ? "bg-white text-black" : "border border-white/10 text-zinc-400 hover:bg-white/5"
+                    }`}
+                  >
+                    {VIEW_META[key].label}
+                    <span className="ml-2 opacity-70">
+                      (
+                      {key === "team"
+                        ? counts.team
+                        : key === "my-drafts"
+                          ? counts.myDrafts
+                          : counts.myPublished}
+                      )
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <p className="text-sm text-zinc-500">{VIEW_META[view].description}</p>
+            </div>
+
+            {filtered.length === 0 ? (
+              <div className="rounded-3xl border border-dashed border-white/10 p-16 text-center">
+                <p className="text-xl text-zinc-300">
+                  {view === "team" && "No published prototypes yet"}
+                  {view === "my-drafts" && "You have no drafts"}
+                  {view === "my-published" && "You haven't published anything yet"}
+                </p>
+                <p className="mt-2 text-sm text-zinc-500">
+                  {view === "team"
+                    ? "Publish a draft to get a live link, then share it."
+                    : "Create new, build in Cursor, then Publish."}
+                </p>
+                {view !== "team" && (
+                  <Button className="mt-6" onClick={() => setModalOpen(true)}>Create new</Button>
+                )}
+              </div>
+            ) : (
+              <div className="grid items-stretch gap-6 md:grid-cols-2 xl:grid-cols-3">
+                {filtered.map((prototype) => (
+                  <PrototypeCard
+                    key={prototype.id}
+                    prototype={prototype}
+                    isOwn={user ? isOwnPrototype(prototype, user) : false}
+                    galleryMode={view === "team"}
+                    accountId={user?.accountId}
+                    onRefresh={load}
+                  />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </main>
 

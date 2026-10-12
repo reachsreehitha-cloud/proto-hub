@@ -13,9 +13,9 @@ import { slugify } from "./paths";
  * Flow:
  * 1. Build prototype → dist/
  * 2. Open SSH ControlMaster (password via expect, or key)
- * 3. mkdir ~/web/{app}
- * 4. tar dist contents | ssh → extract
- * 5. chmod home/web/app
+ * 3. Mkdir ~/web/{app}
+ * 4. Tar dist contents | ssh → extract
+ * 5. Chmod home/web/app
  * 6. Live at https://ux.netapp.com/~{user}/{app}/
  */
 
@@ -77,7 +77,7 @@ function friendlySshError(detail: string, username?: string): string {
   ) {
     return [
       "SSH login failed.",
-      `Tried username "${username || "?"}" - confirm your short NetApp ID (e.g. dyland, not full name).`,
+      `Tried username "${username || "?"}" - confirm your short NetApp ID (e.g. Dyland, not full name).`,
       "Use the password that works for NetApp SSO / OpenLab SSH.",
       "Connect VPN / Zscaler (@netapp.com), then retry.",
     ].join(" ");

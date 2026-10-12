@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { PrototypeCover } from "./PrototypeCover";
 import {
-  CodeIcon,
   CopyIcon,
   EyeIcon,
   EyeOffIcon,
@@ -11,11 +11,13 @@ import {
   FolderIcon,
   TrashIcon,
 } from "./icons";
+import { PublishGuideDialog } from "./PublishGuideDialog";
 import { Button, Card, IconButton, Input } from "./ui";
 import { WatchToggle } from "./WatchToggle";
 import { CommentsEnabledToggle } from "./CommentsEnabledToggle";
 import type { Prototype } from "@/lib/types";
 import { isSharedLocalPreview } from "@/lib/coverPlaceholder";
+import { UX_HOST } from "@/lib/publishGuide";
 
 const OPENLAB_USER_KEY = "proto-hub-openlab-username";
 
@@ -75,9 +77,16 @@ export function PrototypeCard({
   onRefresh: () => void;
 }) {
   const isPublished = prototype.status === "published";
+  /** Full draft/publish chrome (not on Team gallery cards). */
   const showOwnerTools = isOwn && !galleryMode;
+  /** Comments on/off for your published work. Gallery + My published. */
+  const showCommentsToggle = isOwn && isPublished;
+  /** Delete your own cards everywhere, including Team gallery. */
+  const showDelete = isOwn;
   const guessedUser = accountId || prototype.authorEmail.split("@")[0] || "";
   const [publishing, setPublishing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [alsoDeleteDesktop, setAlsoDeleteDesktop] = useState(false);
   const [opening, setOpening] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [actionError, setActionError] = useState("");
@@ -89,6 +98,11 @@ export function PrototypeCard({
   const [showPassword, setShowPassword] = useState(false);
   const [teamShareHint, setTeamShareHint] = useState("");
   const [openLabUsername, setOpenLabUsername] = useState(guessedUser);
+  const [openingPreview, setOpeningPreview] = useState(false);
+  const [previewStatus, setPreviewStatus] = useState("");
+  const [publishGuideOpen, setPublishGuideOpen] = useState(false);
+  const [publishPhase, setPublishPhase] = useState<"confirm" | "publishing" | "done">("confirm");
+  const [publishedLiveUrl, setPublishedLiveUrl] = useState("");
 
   useEffect(() => {
     setOpenLabUsername(readStoredUsername(guessedUser));
@@ -96,7 +110,7 @@ export function PrototypeCard({
 
   const publishUsername = openLabUsername.trim().toLowerCase() || guessedUser;
   const expectedLiveUrl = publishUsername
-    ? `https://ux.netapp.com/~${publishUsername}/${prototype.slug}/`
+    ? `https://${UX_HOST}/~${publishUsername}/${prototype.slug}/`
     : "";
 
   // Prefer the real published URL; ignore leftover localhost placeholders
@@ -119,7 +133,73 @@ export function PrototypeCard({
     }
   }
 
-  async function publish() {
+  /**
+   * Start Vite for this draft’s port, wait until it answers, then open that URL.
+   * “Opening…” forever usually means Vite never came up (broken .bin under OneDrive)
+   * or the browser opened the wrong port (shared 5173 vs this card’s port).
+   */
+  async function openLocalPreview() {
+    setOpeningPreview(true);
+    setPreviewStatus("Starting…");
+    setActionError("");
+    const cardUrl =
+      prototype.localPreviewUrl ||
+      (typeof prototype.localPort === "number"
+        ? `http://localhost:${prototype.localPort}/#/home`
+        : "");
+    const controller = new AbortController();
+    const kill = window.setTimeout(() => controller.abort(), 55000);
+    const statusTimer = window.setTimeout(() => setPreviewStatus("Waiting…"), 4000);
+    try {
+      const res = await fetch(`/api/prototypes/${prototype.id}/start-preview`, {
+        method: "POST",
+        signal: controller.signal,
+      });
+      const data = await res.json().catch(() => ({}));
+      const apiUrl = typeof data.url === "string" ? data.url : "";
+      const url =
+        apiUrl &&
+        (!prototype.localPort || apiUrl.includes(`:${prototype.localPort}`))
+          ? apiUrl
+          : cardUrl;
+
+      if (!res.ok) {
+        // Still surface the draft URL so designers aren’t stuck on a blank “Opening…”
+        if (url && (res.status === 504 || data.url)) {
+          setActionError(
+            `${typeof data.error === "string" ? data.error : "Preview not ready."} Try ${url}`,
+          );
+        } else {
+          throw new Error(
+            typeof data.error === "string" ? data.error : "Could not start preview",
+          );
+        }
+        return;
+      }
+
+      if (!url) throw new Error("No local preview URL for this draft");
+      setPreviewStatus("Opening…");
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        setActionError(
+          cardUrl
+            ? `Preview timed out on port ${prototype.localPort ?? "?"}. Open ${cardUrl} or try again.`
+            : "Preview timed out. Try Open preview again.",
+        );
+      } else {
+        setActionError(err instanceof Error ? err.message : "Could not open preview");
+      }
+    } finally {
+      window.clearTimeout(kill);
+      window.clearTimeout(statusTimer);
+      setOpeningPreview(false);
+      setPreviewStatus("");
+    }
+  }
+
+  function openPublishGuide() {
+    setActionError("");
     if (!publishUsername.trim()) {
       setActionError("Enter your short NetApp username (OpenLab id).");
       return;
@@ -128,8 +208,25 @@ export function PrototypeCard({
       setActionError("Enter your NetApp SSO password to publish.");
       return;
     }
+    setPublishPhase("confirm");
+    setPublishedLiveUrl("");
+    setPublishGuideOpen(true);
+  }
+
+  async function publish() {
+    if (!publishUsername.trim()) {
+      setActionError("Enter your short NetApp username (OpenLab id).");
+      setPublishPhase("confirm");
+      return;
+    }
+    if (!sshPassword.trim()) {
+      setActionError("Enter your NetApp SSO password to publish.");
+      setPublishPhase("confirm");
+      return;
+    }
 
     setPublishing(true);
+    setPublishPhase("publishing");
     setActionError("");
     setPublishSuccess("");
     setTeamShareHint("");
@@ -155,17 +252,24 @@ export function PrototypeCard({
         typeof data.previewUrl === "string" && data.previewUrl
           ? data.previewUrl
           : expectedLiveUrl;
+      setPublishedLiveUrl(url);
       setPublishSuccess(
         url
           ? `Published successfully. Live at ${url}${data.commentsInjected ? " · Shared comments enabled on the live page." : ""}`
           : "Published successfully.",
-      );      if (typeof data.teamShareHint === "string") {
+      );
+      if (typeof data.teamShareHint === "string") {
         setTeamShareHint(data.teamShareHint);
       }
+      setPublishPhase("done");
+      setPublishGuideOpen(true);
       onRefresh();
     } catch (err) {
       setPublishSuccess("");
-      setActionError(err instanceof Error ? err.message : "Publish failed");
+      const message = err instanceof Error ? err.message : "Publish failed";
+      setActionError(message);
+      setPublishPhase("confirm");
+      setPublishGuideOpen(true);
     } finally {
       setPublishing(false);
     }
@@ -250,18 +354,19 @@ export function PrototypeCard({
     window.open(liveUrl, "_blank", "noopener,noreferrer");
   }
 
-  async function remove() {
-    const confirmed = window.confirm(
-      `Remove "${prototype.name}" from Proto Hub?\n\nYour project folder on Desktop will stay - only the hub listing is removed.`,
-    );
-    if (!confirmed) return;
+  const canDeleteDesktop =
+    Boolean(prototype.folderPath) && !prototype.fromRegistry && !prototype.folderMissing;
 
+  async function remove() {
     setDeleting(true);
     setActionError("");
     try {
-      const res = await fetch(`/api/prototypes/${prototype.id}`, { method: "DELETE" });
+      const qs =
+        alsoDeleteDesktop && canDeleteDesktop ? "?deleteFolder=1" : "";
+      const res = await fetch(`/api/prototypes/${prototype.id}${qs}`, { method: "DELETE" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Delete failed");
+      setConfirmDelete(false);
       onRefresh();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Delete failed");
@@ -281,8 +386,8 @@ export function PrototypeCard({
         onUseLivePreview={showOwnerTools ? useLivePreview : undefined}
       />
 
-      <div className="flex flex-1 flex-col gap-3 p-5">
-        <p className="line-clamp-2 min-h-[2.5rem] text-sm text-zinc-400">
+      <div className="flex flex-1 flex-col gap-4 p-5">
+        <p className="line-clamp-2 text-sm leading-relaxed text-zinc-400">
           {prototype.description || "No description yet."}
         </p>
 
@@ -290,10 +395,15 @@ export function PrototypeCard({
           <p className="text-sm text-zinc-300">
             By <span className="font-medium text-white">{authorLabel(prototype, isOwn)}</span>
           </p>
-          <WatchToggle prototypeId={prototype.id} variant="icon" />
+          {/* Bell = your inbox only. Hidden for owners (already notified). Not the live-page bubble. */}
+          <WatchToggle
+            prototypeId={prototype.id}
+            variant="icon"
+            hideForOwner={isOwn}
+          />
         </div>
 
-        {showOwnerTools && (
+        {showCommentsToggle && (
           <CommentsEnabledToggle
             prototypeId={prototype.id}
             enabled={prototype.commentsEnabled !== false}
@@ -308,7 +418,7 @@ export function PrototypeCard({
           />
         )}
 
-        {!showOwnerTools && prototype.commentsEnabled === false && (
+        {!isOwn && prototype.commentsEnabled === false && (
           <p className="text-xs text-zinc-500">Comments off on the live page</p>
         )}
 
@@ -349,7 +459,7 @@ export function PrototypeCard({
               <Input
                 value={openLabUsername}
                 onChange={(event) => setOpenLabUsername(event.target.value)}
-                placeholder="Short NetApp username (e.g. dyland)"
+                placeholder="Short NetApp username (e.g. Dyland)"
                 autoComplete="username"
                 aria-label="OpenLab username"
               />
@@ -363,7 +473,9 @@ export function PrototypeCard({
                   aria-describedby={`publish-hint-${prototype.id}`}
                   className="pr-12"
                   onKeyDown={(event) => {
-                    if (event.key === "Enter" && sshPassword.trim() && publishUsername.trim()) publish();
+                    if (event.key === "Enter" && sshPassword.trim() && publishUsername.trim()) {
+                      openPublishGuide();
+                    }
                   }}
                 />
                 <button
@@ -377,12 +489,12 @@ export function PrototypeCard({
                 </button>
               </div>
               <p id={`publish-hint-${prototype.id}`} className="text-xs leading-relaxed text-zinc-500">
-                Short OpenLab id + NetApp password. VPN / Zscaler (@netapp.com). Edit username if the guess is wrong.
+                OpenLab id + NetApp password. VPN required.
               </p>
             </div>
             <Button
               className="w-full"
-              onClick={publish}
+              onClick={openPublishGuide}
               disabled={publishing || opening || deleting || !sshPassword.trim() || !publishUsername.trim()}
             >
               {publishing ? "Publishing…" : isPublished ? "Republish" : "Publish"}
@@ -398,36 +510,152 @@ export function PrototypeCard({
         )}
         {teamShareHint && <p className="text-xs text-emerald-300/90">{teamShareHint}</p>}
 
-        {showOwnerTools && (
-          <div className="mt-auto flex flex-wrap items-center gap-1 pt-2">
-            <IconButton
-              label={pathCopied ? "Path copied" : "Open folder on Desktop"}
-              onClick={showFolder}
-              disabled={opening || publishing || deleting}
-            >
-              <FolderIcon className="h-4 w-4" />
-            </IconButton>
+        {showOwnerTools && prototype.folderMissing && (
+          <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+            Desktop folder is gone. Remove this card from Proto Hub, or Create the project again.
+          </div>
+        )}
 
-            <IconButton
-              label="Continue building"
-              onClick={continueBuilding}
-              disabled={opening || publishing || deleting}
-            >
-              <CodeIcon className="h-4 w-4" />
-            </IconButton>
+        {(showOwnerTools || showDelete) && (
+          <div className="mt-auto space-y-3 border-t border-white/5 pt-3">
+            {showOwnerTools && (
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  className="w-full"
+                  onClick={continueBuilding}
+                  disabled={
+                    opening ||
+                    openingPreview ||
+                    publishing ||
+                    deleting ||
+                    Boolean(prototype.folderMissing)
+                  }
+                >
+                  {opening ? "Opening…" : "Open in Cursor"}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => void openLocalPreview()}
+                  disabled={
+                    opening ||
+                    openingPreview ||
+                    publishing ||
+                    deleting ||
+                    Boolean(prototype.folderMissing)
+                  }
+                >
+                  {openingPreview ? previewStatus || "Starting…" : "Open preview"}
+                </Button>
+              </div>
+            )}
+            <div className="flex flex-wrap items-center gap-1">
+              {showOwnerTools && (
+                <IconButton
+                  label={pathCopied ? "Path copied" : "Open folder on Desktop"}
+                  onClick={showFolder}
+                  disabled={
+                    opening ||
+                    openingPreview ||
+                    publishing ||
+                    deleting ||
+                    Boolean(prototype.folderMissing)
+                  }
+                >
+                  <FolderIcon className="h-4 w-4" />
+                </IconButton>
+              )}
 
-            <IconButton
-              label="Remove from Proto Hub"
-              tone="danger"
-              onClick={remove}
-              disabled={deleting || publishing || opening}
-              className="ml-auto"
-            >
-              <TrashIcon className="h-4 w-4" />
-            </IconButton>
+              {showDelete && (
+                <IconButton
+                  label="Delete"
+                  tone="danger"
+                  onClick={() => {
+                    setAlsoDeleteDesktop(false);
+                    setActionError("");
+                    setConfirmDelete(true);
+                  }}
+                  disabled={deleting || publishing || opening || openingPreview}
+                  className="ml-auto"
+                >
+                  <TrashIcon className="h-4 w-4" />
+                </IconButton>
+              )}
+            </div>
           </div>
         )}
       </div>
+
+      <PublishGuideDialog
+        open={publishGuideOpen}
+        phase={publishPhase}
+        prototypeName={prototype.name}
+        liveUrl={publishedLiveUrl || expectedLiveUrl || liveUrl}
+        isRepublish={isPublished}
+        error={publishPhase === "confirm" ? actionError : undefined}
+        onClose={() => {
+          if (publishPhase === "publishing") return;
+          setPublishGuideOpen(false);
+          setPublishPhase("confirm");
+        }}
+        onConfirmPublish={() => void publish()}
+      />
+
+      {confirmDelete &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={`delete-title-${prototype.id}`}
+            onClick={(event) => {
+              if (event.target === event.currentTarget && !deleting) setConfirmDelete(false);
+            }}
+          >
+            <div className="w-full max-w-md rounded-3xl border border-white/10 bg-zinc-950 p-6 shadow-2xl">
+              <h2
+                id={`delete-title-${prototype.id}`}
+                className="text-xl font-semibold text-white"
+              >
+                Delete “{prototype.name}”?
+              </h2>
+              <p className="mt-2 text-sm text-zinc-400">
+                Removes it from Proto Hub. The live {UX_HOST} link stays up if you already published.
+              </p>
+
+              {canDeleteDesktop && (
+                <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 px-4 py-3 text-sm text-zinc-200 hover:bg-white/5">
+                  <input
+                    type="checkbox"
+                    checked={alsoDeleteDesktop}
+                    disabled={deleting}
+                    onChange={(event) => setAlsoDeleteDesktop(event.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-white/20 bg-transparent"
+                  />
+                  <span>
+                    <span className="font-medium text-white">Also delete the Desktop folder</span>
+                    <span className="mt-0.5 block text-xs text-zinc-500">
+                      The project files on your Mac. Leave unchecked to keep them.
+                    </span>
+                  </span>
+                </label>
+              )}
+
+              {actionError && <p className="mt-3 text-sm text-red-400">{actionError}</p>}
+
+              <div className="mt-6 flex justify-end gap-3">
+                <Button variant="ghost" disabled={deleting} onClick={() => setConfirmDelete(false)}>
+                  Cancel
+                </Button>
+                <Button disabled={deleting} onClick={() => void remove()}>
+                  {deleting ? "Deleting…" : "Delete"}
+                </Button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
     </Card>
   );
 }

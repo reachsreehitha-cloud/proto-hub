@@ -2,11 +2,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { getTemplateAppDir } from "./templatePath";
+import { ensureNodeRuntime } from "./runtimePath";
 
 const ENG_REGISTRY_LINE = "@netapp:registry=https://npm.repo.eng.netapp.com/";
 
 export interface AutoSetupResult {
   applied: string[];
+  nodeReady: boolean;
+  nodeMessage?: string;
 }
 
 export function templateHasBundledBlueprint(): boolean {
@@ -29,11 +32,22 @@ function ensureUserNpmrc(): string | null {
   return "Pointed npm at the NetApp registry for @netapp packages";
 }
 
+/**
+ * Prep the machine for Create: find/install Node, npmrc for @netapp.
+ * Blueprint itself is copied from the bundled template. No separate Blueprint install.
+ */
 export function autoSetupEnvironment(): AutoSetupResult {
   const applied: string[] = [];
+
+  const node = ensureNodeRuntime();
+  applied.push(...node.applied);
 
   const npmrcFix = ensureUserNpmrc();
   if (npmrcFix) applied.push(npmrcFix);
 
-  return { applied };
+  return {
+    applied,
+    nodeReady: node.ok,
+    nodeMessage: node.message,
+  };
 }

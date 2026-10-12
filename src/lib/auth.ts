@@ -11,7 +11,7 @@ function ldapFromEmail(email: string): string {
 /**
  * Identity for Proto Hub.
  * - Hackathon day: replace with real NetApp SSO / OIDC session lookup.
- * - Until then: uses MOCK_SSO_* if set in .env.local, otherwise your Mac NetApp login (e.g. sb29895).
+ * - Until then: uses MOCK_SSO_* if set in .env.local, otherwise your Mac NetApp login (e.g. Sb29895).
  */
 export function getCurrentUser(): AuthUser {
   const ldap = process.env.USER || "user";

@@ -8,7 +8,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
   const prototype = getPrototype(id);
   if (!prototype) {
-    return NextResponse.json({ error: "Prototype not found" }, { status: 404 });
+    return NextResponse.json(
+      {
+        error:
+          "This draft is missing from Proto Hub’s list (not a login/password problem). Refresh the page. If the Desktop folder is still there, use Help → Restore Desktop drafts.",
+      },
+      { status: 404 },
+    );
   }
 
   const user = getCurrentUser();
@@ -26,7 +32,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   if (!username) {
     return NextResponse.json(
-      { error: "Enter your short NetApp username (OpenLab id), e.g. dyland." },
+      { error: "Enter your short NetApp username (OpenLab id), e.g. Dyland." },
       { status: 400 },
     );
   }

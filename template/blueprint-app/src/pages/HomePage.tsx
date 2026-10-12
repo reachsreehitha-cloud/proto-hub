@@ -1,25 +1,15 @@
-import { BpButton, BpCard, BpStack, BpText } from "@netapp/blueprint";
-import { useNavigate } from "react-router-dom";
+import { BpStack, BpText } from "@netapp/blueprint";
 
+/**
+ * Default landing page after Create.
+ * Service nav (left) is the only navigation. Do not add starter cards or "go to X" buttons.
+ * Agents should replace this page with the real first screen for the prototype.
+ */
 export function HomePage() {
-  const navigate = useNavigate();
-
   return (
-    <BpStack space="400">
+    <BpStack space="300">
       <BpText type="page-title">Your prototype</BpText>
-      <BpText type="body-text">
-        This starter uses @netapp/blueprint@legacy. Prompt Cursor or Claude to build your flow using Blueprint
-        components and the layout guidance in node_modules/@netapp/blueprint/dist/agent/docs/ai-layout-guidance.md.
-      </BpText>
-      <BpCard>
-        <BpStack space="300">
-          <BpText type="section-title">Starter screen</BpText>
-          <BpText type="body-text">
-            Replace this page with your concept. Keep hash routes so Proto Hub can deep-link to screens.
-          </BpText>
-          <BpButton onClick={() => navigate("/details")}>Go to details</BpButton>
-        </BpStack>
-      </BpCard>
+      <BpText type="body-text">Describe the screen you want in Cursor. Keep PrototypeShell and Blueprint.</BpText>
     </BpStack>
   );
 }

@@ -20,12 +20,15 @@ type PreviewStatus =
       localPort?: number | null;
     };
 
+/** Static cover art only. No buttons here (they fought the title overlay). */
 function UniqueDraftCover({
   prototype,
   localPort,
+  reachable,
 }: {
   prototype: Prototype;
   localPort?: number | null;
+  reachable?: boolean;
 }) {
   const palette = coverPaletteFor(prototype.id);
   const initials = coverInitials(prototype.name);
@@ -33,27 +36,23 @@ function UniqueDraftCover({
 
   return (
     <div
-      className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center"
+      className="absolute inset-0 flex flex-col items-center justify-center px-6 pb-16 text-center"
       style={{
         background: `linear-gradient(${palette.angle}deg, ${palette.from} 0%, ${palette.via} 48%, ${palette.to} 100%)`,
       }}
     >
-      <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-black/25 text-3xl font-semibold tracking-tight text-white backdrop-blur-sm">
+      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-black/25 text-2xl font-semibold tracking-tight text-white backdrop-blur-sm">
         {initials}
       </div>
-      <p className="mt-4 max-w-[80%] truncate text-sm font-medium text-white/90">
-        {prototype.name}
+      <p className="mt-3 max-w-[85%] text-xs text-white/65">
+        {reachable
+          ? port
+            ? `Preview running · localhost:${port}`
+            : "Preview running"
+          : port
+            ? `Preview idle · localhost:${port}`
+            : "Preview idle"}
       </p>
-      <p className="mt-2 text-xs text-white/70">
-        {port
-          ? `Dev preview not running · localhost:${port}`
-          : "Dev preview not running"}
-      </p>
-      {port && (
-        <p className="mt-1 max-w-xs text-[11px] text-white/50">
-          In blueprint-app run: npm run dev
-        </p>
-      )}
     </div>
   );
 }
@@ -104,17 +103,16 @@ export function PrototypeCover({
   const showCustom = status?.mode === "custom" && status.coverImage;
   const liveUrl =
     status?.mode === "auto" && status.reachable && status.url ? status.url : null;
-  // Live iframes steal mouse clicks inside the Electron shell — use static covers there.
-  const isElectron =
-    typeof navigator !== "undefined" && /electron/i.test(navigator.userAgent);
-  // Allow localhost only when this prototype has its own port (reachable check already scoped)
+  // Show a scaled live preview when reachable. Pointer-events-none keeps Electron clicks on the card.
   const showLive = Boolean(
-    !isElectron &&
-      liveUrl &&
+    liveUrl &&
       (isPublished
         ? !isSharedLocalPreview(liveUrl)
         : status?.mode === "auto" && status.isLocal && status.reachable),
   );
+
+  const localReachable =
+    status?.mode === "auto" && Boolean(status.isLocal && status.reachable);
 
   return (
     <div className="relative aspect-[16/10] overflow-hidden bg-[#0b0b0f]">
@@ -137,12 +135,13 @@ export function PrototypeCover({
           localPort={
             status?.mode === "auto" ? status.localPort : prototype.localPort
           }
+          reachable={localReachable}
         />
       )}
 
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-black/30" />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/85 via-black/15 to-black/25" />
 
-      <div className="relative flex h-full flex-col justify-between p-6">
+      <div className="relative flex h-full flex-col justify-between p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="flex flex-wrap gap-2">
             <Badge tone={isPublished ? "success" : "warning"}>
@@ -180,7 +179,7 @@ export function PrototypeCover({
                 <button
                   type="button"
                   onClick={onUseLivePreview}
-                  className="rounded-full bg-black/40 px-2.5 py-1.5 text-xs text-zinc-200 backdrop-blur transition hover:bg-white/10"
+                  className="cursor-pointer rounded-full bg-black/40 px-2.5 py-1.5 text-xs text-zinc-200 backdrop-blur transition hover:bg-white/10"
                 >
                   Auto
                 </button>
@@ -189,8 +188,8 @@ export function PrototypeCover({
           )}
         </div>
 
-        <div>
-          <h3 className="text-2xl font-medium text-white">{prototype.name}</h3>
+        <div className="min-w-0 pt-2">
+          <h3 className="truncate text-xl font-medium text-white">{prototype.name}</h3>
         </div>
       </div>
     </div>

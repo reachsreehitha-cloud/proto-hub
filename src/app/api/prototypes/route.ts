@@ -1,13 +1,17 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { checkPrerequisites, firstBlockerMessage } from "@/lib/prerequisites";
-import { allocateLocalPort } from "@/lib/preview";
+import { allocateLocalPort, prototypeFolderPresent } from "@/lib/preview";
 import { createPrototypeRecord, getPrototypes } from "@/lib/store";
 import { scaffoldPrototype } from "@/lib/scaffold";
 import type { CreatePrototypeInput } from "@/lib/types";
 
 export async function GET() {
-  const prototypes = getPrototypes();
+  const prototypes = getPrototypes().map((prototype) => ({
+    ...prototype,
+    folderMissing:
+      !prototype.fromRegistry && !prototypeFolderPresent(prototype.folderPath),
+  }));
   return NextResponse.json({ prototypes });
 }
 
@@ -19,7 +23,9 @@ export async function POST(request: Request) {
     }
 
     const user = getCurrentUser();
-    const prerequisites = checkPrerequisites(body.editor ?? "cursor");
+    // Cursor-only for now. RESTORE: `body.editor ?? "cursor"`
+    const editor = "cursor" as const;
+    const prerequisites = checkPrerequisites(editor);
     const blocker = firstBlockerMessage(prerequisites);
     if (blocker) {
       return NextResponse.json(
@@ -32,7 +38,7 @@ export async function POST(request: Request) {
     const result = scaffoldPrototype(
       body.name.trim(),
       body.folderPath,
-      body.editor ?? "cursor",
+      editor,
       localPort,
     );
 
@@ -59,7 +65,9 @@ export async function POST(request: Request) {
           installHelpUrl: result.installHelpUrl,
           opened: result.opened,
           editor: result.editor,
-          localPort,
+          localPort: result.localPort ?? localPort,
+          localPreviewUrl: result.localPreviewUrl,
+          previewStarted: result.previewStarted,
         },
       },
       { status: 201 },

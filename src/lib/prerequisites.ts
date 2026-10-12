@@ -2,6 +2,11 @@ import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 import { getDesktopPath } from "./paths";
 import { autoSetupEnvironment, templateHasBundledBlueprint } from "./setup";
+import {
+  commandOkResolved,
+  enrichedPath,
+  resolveNpm,
+} from "./runtimePath";
 
 const NPM_AUTH_GUIDE =
   "https://netapp.atlassian.net/wiki/spaces/UX/pages/699076324/GitHub+access+and+package+authentication+for+designers";
@@ -27,26 +32,23 @@ export interface PrerequisiteReport {
   blueprintBundled: boolean;
 }
 
-function commandOk(cmd: string, args: string[] = ["--version"]): boolean {
-  const result = spawnSync(cmd, args, { encoding: "utf-8", timeout: 5000 });
-  return result.status === 0;
-}
-
 function checkNode(): PrerequisiteIssue | null {
-  if (commandOk("node", ["--version"])) return null;
+  // autoSetupEnvironment already tried to install; only block if still missing
+  if (commandOkResolved("node")) return null;
   return {
     id: "node",
-    message: "Node.js needs to be installed once on this Mac.",
+    message:
+      "Node.js could not be installed automatically. Proto Hub needs it once for Blueprint previews.",
     severity: "blocker",
     helpUrl: "https://nodejs.org/",
   };
 }
 
 function checkNpm(): PrerequisiteIssue | null {
-  if (commandOk("npm", ["--version"])) return null;
+  if (commandOkResolved("npm")) return null;
   return {
     id: "npm",
-    message: "npm needs to be installed (it comes with Node.js).",
+    message: "npm could not be found after setup (it comes with Node.js).",
     severity: "blocker",
     helpUrl: "https://nodejs.org/",
   };
@@ -74,10 +76,15 @@ function checkDesktopWritable(): PrerequisiteIssue | null {
 }
 
 function checkNpmRegistry(): PrerequisiteIssue | null {
+  const npm = resolveNpm() || "npm";
   const result = spawnSync(
-    "npm",
+    npm,
     ["view", "@netapp/blueprint", "version", `--registry=${ENG_REGISTRY}`, "--prefer-online"],
-    { encoding: "utf-8", timeout: 20000 },
+    {
+      encoding: "utf-8",
+      timeout: 20000,
+      env: { ...process.env, PATH: enrichedPath() },
+    },
   );
 
   const output = `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
@@ -109,9 +116,11 @@ function checkNpmRegistry(): PrerequisiteIssue | null {
   return null;
 }
 
-function checkEditor(editor?: "cursor" | "claude"): PrerequisiteIssue | null {
+function checkEditor(editor?: "cursor" /* | "claude" */): PrerequisiteIssue | null {
   if (process.platform !== "darwin") return null;
 
+  /*
+  // RESTORE: Claude / cloud editor prerequisite
   if (editor === "claude") {
     if (!fs.existsSync("/Applications/Claude.app")) {
       return {
@@ -123,7 +132,9 @@ function checkEditor(editor?: "cursor" | "claude"): PrerequisiteIssue | null {
     }
     return null;
   }
+  */
 
+  void editor;
   if (!fs.existsSync("/Applications/Cursor.app")) {
     return {
       id: "cursor",
@@ -136,8 +147,9 @@ function checkEditor(editor?: "cursor" | "claude"): PrerequisiteIssue | null {
   return null;
 }
 
-export function checkPrerequisites(editor?: "cursor" | "claude"): PrerequisiteReport {
-  const { applied: autoFixed } = autoSetupEnvironment();
+export function checkPrerequisites(editor?: "cursor" /* | "claude" */): PrerequisiteReport {
+  // Finds or auto-installs Node, writes npmrc, etc.
+  const setup = autoSetupEnvironment();
   const blueprintBundled = templateHasBundledBlueprint();
 
   const checks = [
@@ -156,7 +168,7 @@ export function checkPrerequisites(editor?: "cursor" | "claude"): PrerequisiteRe
     issues: checks,
     blockers,
     warnings,
-    autoFixed,
+    autoFixed: setup.applied,
     blueprintBundled,
   };
 }

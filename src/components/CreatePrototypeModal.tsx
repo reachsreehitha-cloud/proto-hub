@@ -37,6 +37,9 @@ interface ScaffoldResult {
   installHelpUrl?: string;
   opened: boolean;
   editor: EditorChoice;
+  localPort?: number;
+  localPreviewUrl?: string;
+  previewStarted?: boolean;
 }
 
 type Step = "details" | "location" | "editor" | "creating" | "done";
@@ -69,6 +72,8 @@ export function CreatePrototypeModal({ open, onClose, onCreated }: Props) {
   const [checkingPrerequisites, setCheckingPrerequisites] = useState(false);
   const [result, setResult] = useState<ScaffoldResult | null>(null);
   const [error, setError] = useState("");
+  const [pathConflict, setPathConflict] = useState("");
+  const [checkingPath, setCheckingPath] = useState(false);
   const [pickingFolder, setPickingFolder] = useState(false);
 
   const desktopPath = defaults?.desktopPath ?? "";
@@ -107,6 +112,45 @@ export function CreatePrototypeModal({ open, onClose, onCreated }: Props) {
     loadPrerequisites(editor);
   }, [editor, open]);
 
+  // Clear stale create errors whenever the proposed path changes.
+  useEffect(() => {
+    setError("");
+  }, [folderPath]);
+
+  // Live check so conflicts show on step 1 as soon as the name resolves.
+  useEffect(() => {
+    if (!open || !folderPath || !name.trim()) {
+      setPathConflict("");
+      setCheckingPath(false);
+      return;
+    }
+
+    let cancelled = false;
+    setCheckingPath(true);
+    const timer = window.setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/prototypes/defaults?path=${encodeURIComponent(folderPath)}`);
+        const data = await res.json();
+        if (cancelled) return;
+        const check = data.folderCheck as { exists?: boolean; message?: string | null } | null;
+        if (res.ok && check?.exists) {
+          setPathConflict(check.message || `A folder already exists at: ${folderPath}`);
+        } else {
+          setPathConflict("");
+        }
+      } catch {
+        if (!cancelled) setPathConflict("");
+      } finally {
+        if (!cancelled) setCheckingPath(false);
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [open, folderPath, name]);
+
   async function handlePickFolder() {
     if (!defaults?.canPickFolder) return;
     setPickingFolder(true);
@@ -131,6 +175,10 @@ export function CreatePrototypeModal({ open, onClose, onCreated }: Props) {
   if (!open) return null;
 
   async function handleCreate() {
+    if (pathConflict) {
+      setStep("details");
+      return;
+    }
     setStep("creating");
     setError("");
     try {
@@ -145,12 +193,43 @@ export function CreatePrototypeModal({ open, onClose, onCreated }: Props) {
         throw new Error(data.error || "Failed to create prototype");
       }
 
-      setResult(data.scaffold);
+      const scaffold = data.scaffold as ScaffoldResult;
+      const prototypeId =
+        typeof data.prototype?.id === "string" ? data.prototype.id : "";
+      setResult(scaffold);
       setStep("done");
       onCreated();
+      // Wait until Vite is reachable, then open. Avoids “site cannot be reached”
+      if (scaffold?.localPreviewUrl && scaffold.installStatus === "success" && prototypeId) {
+        void (async () => {
+          try {
+            const previewRes = await fetch(`/api/prototypes/${prototypeId}/start-preview`, {
+              method: "POST",
+            });
+            const previewData = await previewRes.json();
+            const url =
+              typeof previewData.url === "string" && previewData.url
+                ? previewData.url
+                : scaffold.localPreviewUrl;
+            if (previewRes.ok && url) {
+              window.open(url, "_blank", "noopener,noreferrer");
+            }
+          } catch {
+            // Create still succeeded; user can use Open preview on the card
+          }
+        })();
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
-      setStep("editor");
+      const message = err instanceof Error ? err.message : "Something went wrong";
+      setError(message);
+      if (/folder already exists/i.test(message)) {
+        setPathConflict(message);
+        setStep("details");
+      } else {
+        // Cursor-only: return to location (editor step disabled. See commented block below)
+        setStep("location");
+        // setStep("editor"); // RESTORE with Claude/cloud editor step
+      }
     }
   }
 
@@ -162,13 +241,17 @@ export function CreatePrototypeModal({ open, onClose, onCreated }: Props) {
     setEditor("cursor");
     setResult(null);
     setError("");
+    setPathConflict("");
     onClose();
   }
 
-  const stepNumber = { details: 1, location: 2, editor: 3, creating: 3, done: 3 }[step];
+  // Cursor-only: 2 steps (details → location → create). Editor step kept in type for restore.
+  const stepNumber = { details: 1, location: 2, editor: 2, creating: 2, done: 2 }[step];
   const showStepIndicator = step !== "done";
   const locationLabel = parentLabel(parentFolder, desktopPath);
   const hasBlockers = (prerequisites?.blockers.length ?? 0) > 0;
+  const canLeaveDetails =
+    !!name.trim() && !hasBlockers && !checkingPrerequisites && !pathConflict && !checkingPath;
 
   function PrerequisitesPanel({ compact = false }: { compact?: boolean }) {
     if (!prerequisites) return null;
@@ -197,7 +280,8 @@ export function CreatePrototypeModal({ open, onClose, onCreated }: Props) {
           <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100">
             <p className="font-medium">You are ready to create.</p>
             <p className="mt-1 text-emerald-200/80">
-              Proto Hub copies a starter folder to your Desktop with Blueprint, Cursor rules, and git already set up.
+              Proto Hub finds or installs Node if needed, copies Blueprint to your Desktop, opens
+              Cursor, and starts the preview link for you. No terminal.
             </p>
           </div>
         )}
@@ -242,7 +326,7 @@ export function CreatePrototypeModal({ open, onClose, onCreated }: Props) {
           <div>
             {showStepIndicator && (
               <p className="text-xs uppercase tracking-[0.3em] text-zinc-500">
-                {step === "creating" ? "Creating…" : `Step ${stepNumber} of 3`}
+                {step === "creating" ? "Creating…" : `Step ${stepNumber} of 2`}
               </p>
             )}
             <h2 className="text-2xl font-semibold text-white">Create new prototype</h2>
@@ -255,12 +339,29 @@ export function CreatePrototypeModal({ open, onClose, onCreated }: Props) {
         {step === "details" && (
           <div className="space-y-4">
             <p className="text-sm text-zinc-400">
-              Name your prototype - Proto Hub does the rest: copies Blueprint to your Desktop, sets up Cursor rules, and opens your editor.
+              Name your prototype - Proto Hub does the rest: copies Blueprint to your Desktop, sets up Cursor rules, and opens Cursor.
             </p>
             <PrerequisitesPanel />
             <div>
               <label className="mb-2 block text-sm text-zinc-400">Prototype name</label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="ONTAP upgrades flow" required />
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="ONTAP upgrades flow"
+                required
+              />
+              {name.trim() && (
+                <p className="mt-2 text-xs text-zinc-500">
+                  Folder name: <span className="text-zinc-300">{slug}</span>
+                  {parentFolder ? ` → ${parentFolder}/${slug}` : ""}
+                </p>
+              )}
+              {checkingPath && name.trim() && (
+                <p className="mt-2 text-xs text-zinc-500">Checking folder…</p>
+              )}
+              {pathConflict && (
+                <p className="mt-2 text-sm text-red-400">{pathConflict}</p>
+              )}
             </div>
             <div>
               <label className="mb-2 block text-sm text-zinc-400">Description</label>
@@ -268,7 +369,7 @@ export function CreatePrototypeModal({ open, onClose, onCreated }: Props) {
             </div>
             <div className="flex justify-end gap-3 pt-2">
               <Button type="button" variant="ghost" onClick={handleClose}>Cancel</Button>
-              <Button onClick={() => setStep("location")} disabled={!name.trim() || hasBlockers || checkingPrerequisites}>
+              <Button onClick={() => setStep("location")} disabled={!canLeaveDetails}>
                 Next
               </Button>
             </div>
@@ -309,15 +410,42 @@ export function CreatePrototypeModal({ open, onClose, onCreated }: Props) {
               <p className="text-xs text-zinc-500">Saving to Desktop.</p>
             )}
 
+            {pathConflict && <p className="text-sm text-red-400">{pathConflict}</p>}
             {error && <p className="text-sm text-red-400">{error}</p>}
 
             <div className="flex justify-between gap-3 pt-2">
               <Button variant="ghost" onClick={() => setStep("details")}>Back</Button>
-              <Button onClick={() => setStep("editor")} disabled={!folderPath.trim() || pickingFolder}>Next</Button>
+              <Button
+                onClick={() => {
+                  setEditor("cursor");
+                  void handleCreate();
+                }}
+                disabled={
+                  !folderPath.trim() ||
+                  pickingFolder ||
+                  !!pathConflict ||
+                  checkingPath ||
+                  hasBlockers ||
+                  checkingPrerequisites
+                }
+              >
+                Create & open in Cursor
+              </Button>
+              {/*
+              // RESTORE: editor picker step (Cursor vs Claude/cloud)
+              <Button
+                onClick={() => setStep("editor")}
+                disabled={!folderPath.trim() || pickingFolder || !!pathConflict || checkingPath}
+              >
+                Next
+              </Button>
+              */}
             </div>
           </div>
         )}
 
+        {/*
+        // RESTORE: Claude / cloud editor choice step
         {step === "editor" && (
           <div className="space-y-4">
             <p className="text-sm text-zinc-400">Pick where you want to build. Blueprint is already in the folder we copy.</p>
@@ -344,21 +472,23 @@ export function CreatePrototypeModal({ open, onClose, onCreated }: Props) {
               </button>
             </div>
             <PrerequisitesPanel compact />
+            {pathConflict && <p className="text-sm text-red-400">{pathConflict}</p>}
             {error && <p className="text-sm text-red-400">{error}</p>}
             <div className="flex justify-between gap-3 pt-2">
               <Button variant="ghost" onClick={() => setStep("location")}>Back</Button>
-              <Button onClick={handleCreate} disabled={hasBlockers || checkingPrerequisites}>
+              <Button onClick={handleCreate} disabled={hasBlockers || checkingPrerequisites || !!pathConflict}>
                 Create & open
               </Button>
             </div>
           </div>
         )}
+        */}
 
         {step === "creating" && (
           <div className="space-y-4 py-8 text-center">
             <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-white/20 border-t-white" />
             <p className="text-lg text-white">Creating your prototype…</p>
-            <p className="text-sm text-zinc-400">Copying your starter folder and opening {editor === "cursor" ? "Cursor" : "Claude"}.</p>
+            <p className="text-sm text-zinc-400">Copying your starter folder and opening Cursor.</p>
           </div>
         )}
 
@@ -371,10 +501,35 @@ export function CreatePrototypeModal({ open, onClose, onCreated }: Props) {
             }`}>
               {result.opened && (
                 <p className="mb-2 font-medium">
-                  Opened in {result.editor === "cursor" ? "Cursor" : "Claude"}.
+                  Opened in Cursor.
                 </p>
               )}
               <p>{result.installMessage}</p>
+              {result.installStatus === "success" && (
+                <div className="mt-2 space-y-2 text-emerald-200/80">
+                  <p>
+                    Cursor opens automatically. Preview starts for you. Proto Hub also opens the
+                    local link in your browser (no terminal).
+                  </p>
+                  {result.localPreviewUrl && (
+                    <p>
+                      Preview:{" "}
+                      <a
+                        href={result.localPreviewUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-medium text-emerald-100 underline underline-offset-2"
+                      >
+                        {result.localPreviewUrl}
+                      </a>
+                    </p>
+                  )}
+                  <p>
+                    In Cursor, open <span className="font-medium">CURSOR_PROMPT.md</span> (or Proto
+                    Hub → Help) for prompts.
+                  </p>
+                </div>
+              )}
               {result.installStatus !== "success" && (
                 <p className="mt-2 text-amber-200/80">
                   Your folder is on Desktop. Connect to VPN, then click Create again or contact the UX platform team.
@@ -391,6 +546,17 @@ export function CreatePrototypeModal({ open, onClose, onCreated }: Props) {
                 GitHub package authentication guide
               </a>
             )}
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-zinc-300">
+              <p className="font-medium text-white">Try this prompt first (one-shot)</p>
+              <p className="mt-2 text-zinc-400">
+                Replace the Home page with a Systems discovery screen: title + actions, PageAlert, MetricPropertyBand,
+                filters, and a systems table. Reuse{" "}
+                <code className="text-zinc-200">consolePatterns.tsx</code> and follow{" "}
+                <code className="text-zinc-200">FIGMA_COMPONENT_CONFIG.md</code>. Keep PrototypeShell and{" "}
+                <code className="text-zinc-200">@netapp/blueprint/css</code>. Use left nav only. No starter
+                cards or “open other page” buttons.
+              </p>
+            </div>
             <div>
               <p className="mb-2 text-xs uppercase tracking-wide text-zinc-500">Folder</p>
               <p className="text-sm text-white">

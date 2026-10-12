@@ -1,12 +1,12 @@
 @import "tailwindcss";
 
-/* Shared with commenter — see ../../DESIGN-SYSTEM.md */
+/* Shared with commenter. see ../../DESIGN-SYSTEM.md */
 :root {
   --background: #050505;
   --foreground: #f4f4f5;
   --ink: #050505;
   --ink-elevated: #18181b;
-  --accent: #059669; /* emerald-600 — readable on light commenter + dark Hub */
+  --accent: #059669; /* emerald-600. readable on light commenter + dark Hub */
   --pin: #e8a317;
 }
 

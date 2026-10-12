@@ -27,7 +27,7 @@ function stripCommenterTags(html: string): string {
 
 /**
  * Inject the shared widget into built index.html.
- * Identical script every prototype gets — no per-app comment stack.
+ * Identical script every prototype gets. No per-app comment stack.
  * Pass enabled:false to remove the widget and mark the page as opted out
  * (also helps when Apache injects overlay.js sitewide).
  */
@@ -71,7 +71,7 @@ export function injectCommenterScript(
   // Overlay only loads when meta is on (sitewide Apache inject + local script).
   injectHead(`<meta name="ux-commenter" content="on" ${MARKER} />`);
 
-  // Local commenter has no Apache inject — ship the overlay script.
+  // Local commenter has no Apache inject. Ship the overlay script.
   // On ux.netapp.com Apache already injects /__commenter/overlay.js for /~ paths.
   const isUxHosted =
     /ux\.netapp\.com\/__commenter/i.test(base) || /\/__commenter$/i.test(base);
@@ -108,7 +108,7 @@ export async function registerSiteAdmin(opts: {
     ...commenterInternalHeaders(),
   };
   if (!headers["X-Commenter-Internal"]) {
-    console.warn("[ux-commenter] COMMENTER_INTERNAL_TOKEN unset — admin not registered");
+    console.warn("[ux-commenter] COMMENTER_INTERNAL_TOKEN unset. Admin not registered");
     return;
   }
   try {
@@ -160,7 +160,7 @@ export async function setLiveCommentsEnabled(opts: {
 
 /**
  * Touch the shared notebook for this live URL (auto-create folder). Optional.
- * Widget also does this on first open — so publish does not depend on it.
+ * Widget also does this on first open. So publish does not depend on it.
  */
 export async function ensureCommenterProject(opts: {
   commenterBaseUrl?: string;

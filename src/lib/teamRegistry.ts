@@ -20,7 +20,7 @@ const DEFAULT_REMOTE =
   process.env.TEAM_REGISTRY_URL ||
   "https://raw.githubusercontent.com/reachsreehitha-cloud/proto-hub/main/data/team-registry.json";
 
-function readLocalRegistry(): TeamRegistryEntry[] {
+export function readLocalRegistry(): TeamRegistryEntry[] {
   try {
     if (!fs.existsSync(REGISTRY_FILE)) return [];
     const raw = JSON.parse(fs.readFileSync(REGISTRY_FILE, "utf-8")) as TeamRegistryEntry[];
@@ -65,6 +65,37 @@ export function registryEntryFromPrototype(prototype: Prototype): TeamRegistryEn
     previewUrl: prototype.previewUrl,
     publishedAt: prototype.publishedAt || new Date().toISOString(),
   };
+}
+
+/** Remove a gallery listing from the local team-registry.json (by id or url). */
+export function removeFromLocalRegistry(opts: {
+  id?: string;
+  previewUrl?: string;
+  authorEmail?: string;
+  slug?: string;
+}): boolean {
+  const entries = readLocalRegistry();
+  const next = entries.filter((entry) => {
+    if (opts.id && entry.id === opts.id) return false;
+    if (
+      opts.previewUrl &&
+      entry.previewUrl?.replace(/\/$/, "") === opts.previewUrl.replace(/\/$/, "")
+    ) {
+      return false;
+    }
+    if (
+      opts.authorEmail &&
+      opts.slug &&
+      entry.authorEmail.toLowerCase() === opts.authorEmail.toLowerCase() &&
+      entry.slug === opts.slug
+    ) {
+      return false;
+    }
+    return true;
+  });
+  if (next.length === entries.length) return false;
+  writeLocalRegistry(next);
+  return true;
 }
 
 /** Upsert into the committed team-registry.json so teammates can pull it. */
