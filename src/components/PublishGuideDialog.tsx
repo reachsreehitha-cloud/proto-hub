@@ -143,6 +143,14 @@ export function PublishGuideDialog({
 
         {phase === "done" && (
           <div className="space-y-4">
+            <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3">
+              <p className="text-[15px] font-medium text-emerald-100">Published successfully</p>
+              <p className="mt-1 text-[13px] text-emerald-100/80">
+                {commentsEnabled
+                  ? "Live on ux.netapp.com. Comments are on."
+                  : "Live on ux.netapp.com. Comments are off."}
+              </p>
+            </div>
             {liveUrl && (
               <a
                 href={liveUrl}
@@ -153,11 +161,7 @@ export function PublishGuideDialog({
                 {liveUrl}
               </a>
             )}
-            <p className="text-[15px] text-zinc-500">
-              {commentsEnabled
-                ? "Share that link. The comment bubble is on for visitors."
-                : "Share that link. Comments are off until you turn them on."}
-            </p>
+            <p className="text-[15px] text-zinc-500">Copy the link and share it.</p>
 
             {error && <p className="text-sm text-red-300">{error}</p>}
 

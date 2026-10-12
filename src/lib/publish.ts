@@ -77,7 +77,7 @@ function friendlySshError(detail: string, username?: string): string {
   ) {
     return [
       "SSH login failed.",
-      `Tried username "${username || "?"}" - confirm your short NetApp ID (e.g. Dyland, not full name).`,
+      `Tried username "${username || "?"}" - confirm your short NetApp ID (e.g. sb29895, not your full name).`,
       "Use the password that works for NetApp SSO / OpenLab SSH.",
       "Connect VPN / Zscaler (@netapp.com), then retry.",
     ].join(" ");

@@ -33,6 +33,11 @@ export function Dashboard() {
   const [view, setView] = useState<View>("team");
   const [helpOpen, setHelpOpen] = useState(false);
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [publishToast, setPublishToast] = useState<{
+    name: string;
+    liveUrl: string;
+    commentsInjected: boolean;
+  } | null>(null);
 
   const load = useCallback(async () => {
     const [protoRes, teamRes, meRes] = await Promise.all([
@@ -107,6 +112,49 @@ export function Dashboard() {
       </header>
 
       <main className="relative z-10 mx-auto max-w-7xl space-y-8 px-6 pb-20">
+        {publishToast && (
+          <div
+            className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-5 py-4"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-emerald-100">
+                  Published “{publishToast.name}”
+                </p>
+                <a
+                  href={publishToast.liveUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-1 block truncate text-sm text-emerald-100/90 underline-offset-2 hover:underline"
+                >
+                  {publishToast.liveUrl}
+                </a>
+                <p className="mt-1 text-xs text-emerald-100/70">
+                  {publishToast.commentsInjected
+                    ? "Comments are on for visitors."
+                    : "Comments are off on this live page."}
+                </p>
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setView("my-published");
+                    setPublishToast(null);
+                  }}
+                >
+                  My published
+                </Button>
+                <Button variant="ghost" onClick={() => setPublishToast(null)}>
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {helpOpen ? (
           <HelpPanel />
         ) : (
@@ -188,6 +236,10 @@ export function Dashboard() {
                     galleryMode={view === "team"}
                     accountId={user?.accountId}
                     onRefresh={load}
+                    onPublished={(info) => {
+                      // Toast only. Do not switch tabs yet or the success dialog unmounts.
+                      setPublishToast(info);
+                    }}
                   />
                 ))}
               </div>

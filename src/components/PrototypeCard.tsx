@@ -21,17 +21,35 @@ import { UX_HOST } from "@/lib/publishGuide";
 
 const OPENLAB_USER_KEY = "proto-hub-openlab-username";
 
+/** Leftover ids from demos / docs examples. Never treat these as your OpenLab id. */
+const STALE_OPENLAB_IDS = /^(dyland|dylan|jane|test\d*|user|admin|demo|example)$/i;
+
 function authorLabel(prototype: Prototype, isOwn: boolean) {
   if (isOwn) return "You";
   return prototype.author?.trim() || prototype.authorEmail.split("@")[0] || "Someone";
 }
 
+/**
+ * Prefer Mac login (accountId, e.g. sb29895). Only keep a stored override when it
+ * looks like a real id and is not a known test placeholder.
+ */
 function readStoredUsername(fallback: string) {
   if (typeof window === "undefined") return fallback;
+  const macId = fallback.trim().toLowerCase();
   try {
-    return localStorage.getItem(OPENLAB_USER_KEY)?.trim() || fallback;
+    const stored = localStorage.getItem(OPENLAB_USER_KEY)?.trim().toLowerCase() || "";
+    if (!stored || STALE_OPENLAB_IDS.test(stored)) {
+      if (stored) localStorage.removeItem(OPENLAB_USER_KEY);
+      return macId || fallback;
+    }
+    // Mac login is the default source of truth after mistaken test publishes
+    if (macId && stored !== macId) {
+      localStorage.removeItem(OPENLAB_USER_KEY);
+      return macId;
+    }
+    return stored;
   } catch {
-    return fallback;
+    return macId || fallback;
   }
 }
 
@@ -68,6 +86,7 @@ export function PrototypeCard({
   galleryMode = false,
   accountId,
   onRefresh,
+  onPublished,
 }: {
   prototype: Prototype;
   isOwn: boolean;
@@ -75,6 +94,11 @@ export function PrototypeCard({
   galleryMode?: boolean;
   accountId?: string;
   onRefresh: () => void;
+  onPublished?: (info: {
+    name: string;
+    liveUrl: string;
+    commentsInjected: boolean;
+  }) => void;
 }) {
   const isPublished = prototype.status === "published";
   /** Full draft/publish chrome (not on Team gallery cards). */
@@ -284,17 +308,35 @@ export function PrototypeCard({
           ? data.previewUrl
           : expectedLiveUrl;
       setPublishedLiveUrl(url);
+      const commentsInjected = Boolean(data.commentsInjected);
       setPublishSuccess(
         url
-          ? `Published successfully. Live at ${url}${data.commentsInjected ? " · Shared comments enabled on the live page." : ""}`
-          : "Published successfully.",
+          ? `Published. Live at ${url}${commentsInjected ? ". Comments are on." : ""}`
+          : "Published.",
       );
       if (typeof data.teamShareHint === "string") {
         setTeamShareHint(data.teamShareHint);
       }
       setPublishPhase("done");
       setPublishGuideOpen(true);
-      onRefresh();
+      // Do not refresh yet. Refreshing moves the card out of My drafts and
+      // unmounts this success dialog before anyone can see it.
+      onPublished?.({
+        name: prototype.name,
+        liveUrl: url,
+        commentsInjected,
+      });
+      try {
+        if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+          new Notification("Published to ux.netapp.com", {
+            body: url || prototype.name,
+          });
+        } else if (typeof Notification !== "undefined" && Notification.permission === "default") {
+          void Notification.requestPermission();
+        }
+      } catch {
+        // ignore
+      }
     } catch (err) {
       setPublishSuccess("");
       const message = err instanceof Error ? err.message : "Publish failed";
@@ -475,10 +517,15 @@ export function PrototypeCard({
               <Input
                 value={openLabUsername}
                 onChange={(event) => setOpenLabUsername(event.target.value)}
-                placeholder="Short NetApp username (e.g. Dyland)"
+                placeholder={guessedUser || "your OpenLab id"}
                 autoComplete="username"
                 aria-label="OpenLab username"
               />
+              {guessedUser ? (
+                <p className="text-xs text-zinc-500">
+                  Defaults to your Mac login ({guessedUser}).
+                </p>
+              ) : null}
               <div className="relative">
                 <Input
                   type={showPassword ? "text" : "password"}
@@ -645,8 +692,12 @@ export function PrototypeCard({
         onCommentsEnabledChange={(next) => void setCommentsEnabled(next)}
         onClose={() => {
           if (publishPhase === "publishing") return;
+          const wasDone = publishPhase === "done";
           setPublishGuideOpen(false);
           setPublishPhase("confirm");
+          // Refresh after the success dialog is dismissed so the card can move
+          // to My published without killing the “Published successfully” UI.
+          if (wasDone) onRefresh();
         }}
         onConfirmPublish={() => void publish()}
       />

@@ -36,7 +36,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   if (!username) {
     return NextResponse.json(
-      { error: "Enter your short NetApp username (OpenLab id), e.g. Dyland." },
+      { error: "Enter your short NetApp username (OpenLab id), e.g. sb29895." },
       { status: 400 },
     );
   }
