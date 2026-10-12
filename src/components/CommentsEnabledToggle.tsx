@@ -60,14 +60,14 @@ export function CommentsEnabledToggle({
   }
 
   const tip = isOn
-    ? "Comment bubble on the live page for everyone. Click to hide it for all visitors."
-    : "Comment bubble hidden on the live page for everyone. Click to show it again.";
+    ? "Commenter bubble on for everyone on the live ux.netapp.com link. Click to turn it off."
+    : "Commenter bubble off on the live link. Click to turn it on, then publish or republish.";
 
   return (
     <div className="flex items-center justify-between gap-3">
       <div className="min-w-0">
         <p className="text-sm text-zinc-200">Comments on live page</p>
-        <p className="text-xs text-zinc-500">For everyone viewing the link (not your email)</p>
+        <p className="text-xs text-zinc-500">Commenter bubble for everyone on the published link</p>
       </div>
       <Tip label={tip} side="bottom">
         <button

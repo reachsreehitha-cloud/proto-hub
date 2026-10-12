@@ -188,6 +188,7 @@ export function recoverOrphanedDesktopPrototypes(author: {
       coverMode: "auto",
       localPort,
       localPreviewUrl: localPreviewUrlForPort(localPort),
+      commentsEnabled: true,
       watchers: email.includes("@") ? [email] : [],
       createdAt: now,
       updatedAt: now,
@@ -253,6 +254,7 @@ export function createPrototypeRecord(
     coverMode: "auto",
     localPort,
     localPreviewUrl,
+    commentsEnabled: true,
     // Owner automatically watches their own prototype
     watchers: authorEmail.includes("@") ? [authorEmail] : [],
     createdAt: now,

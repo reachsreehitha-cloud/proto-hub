@@ -29,6 +29,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       ? body.username.trim()
       : user.accountId;
   const username = usernameRaw.toLowerCase().replace(/[^a-z0-9_-]/g, "");
+  const commentsEnabled =
+    typeof body.commentsEnabled === "boolean"
+      ? body.commentsEnabled
+      : prototype.commentsEnabled !== false;
 
   if (!username) {
     return NextResponse.json(
@@ -48,13 +52,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const hubReviewUrl = `${hubBase}/review/${prototype.id}`;
 
   try {
+    // Persist the publish-dialog toggle before deploy so later republish matches.
+    if (prototype.commentsEnabled !== commentsEnabled) {
+      const { updatePrototype } = await import("@/lib/store");
+      updatePrototype(prototype.id, { commentsEnabled });
+    }
+
     const result = await publishPrototypeToUx(
       prototype.folderPath,
       prototype.name,
       hubReviewUrl,
       { username, password },
       prototype.slug,
-      prototype.commentsEnabled !== false,
+      commentsEnabled,
     );
     const updated = publishPrototype(prototype.id, result.previewUrl);
     if (updated) {

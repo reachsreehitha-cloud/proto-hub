@@ -79,8 +79,8 @@ export function PrototypeCard({
   const isPublished = prototype.status === "published";
   /** Full draft/publish chrome (not on Team gallery cards). */
   const showOwnerTools = isOwn && !galleryMode;
-  /** Comments on/off for your published work. Gallery + My published. */
-  const showCommentsToggle = isOwn && isPublished;
+  /** Comments on/off for live ux.netapp.com (drafts before publish + published). */
+  const showCommentsToggle = isOwn && (showOwnerTools || isPublished);
   /** Delete your own cards everywhere, including Team gallery. */
   const showDelete = isOwn;
   const guessedUser = accountId || prototype.authorEmail.split("@")[0] || "";
@@ -103,10 +103,15 @@ export function PrototypeCard({
   const [publishGuideOpen, setPublishGuideOpen] = useState(false);
   const [publishPhase, setPublishPhase] = useState<"confirm" | "publishing" | "done">("confirm");
   const [publishedLiveUrl, setPublishedLiveUrl] = useState("");
+  const [commentsOn, setCommentsOn] = useState(prototype.commentsEnabled !== false);
 
   useEffect(() => {
     setOpenLabUsername(readStoredUsername(guessedUser));
   }, [guessedUser]);
+
+  useEffect(() => {
+    setCommentsOn(prototype.commentsEnabled !== false);
+  }, [prototype.commentsEnabled, prototype.id]);
 
   const publishUsername = openLabUsername.trim().toLowerCase() || guessedUser;
   const expectedLiveUrl = publishUsername
@@ -198,6 +203,30 @@ export function PrototypeCard({
     }
   }
 
+  async function setCommentsEnabled(next: boolean) {
+    setCommentsOn(next);
+    try {
+      const res = await fetch(`/api/prototypes/${prototype.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          commentsEnabled: next,
+          liveSiteId:
+            isPublished && publishUsername && prototype.slug
+              ? `~${publishUsername}/${prototype.slug}`
+              : undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not update comments");
+      if (typeof data.hint === "string") setTeamShareHint(data.hint);
+      onRefresh();
+    } catch (err) {
+      setCommentsOn(prototype.commentsEnabled !== false);
+      setActionError(err instanceof Error ? err.message : "Could not update comments");
+    }
+  }
+
   function openPublishGuide() {
     setActionError("");
     if (!publishUsername.trim()) {
@@ -208,6 +237,7 @@ export function PrototypeCard({
       setActionError("Enter your NetApp SSO password to publish.");
       return;
     }
+    setCommentsOn(prototype.commentsEnabled !== false);
     setPublishPhase("confirm");
     setPublishedLiveUrl("");
     setPublishGuideOpen(true);
@@ -243,6 +273,7 @@ export function PrototypeCard({
         body: JSON.stringify({
           password: sshPassword,
           username: publishUsername.trim().toLowerCase(),
+          commentsEnabled: commentsOn,
         }),
       });
       const data = await res.json();
@@ -403,21 +434,6 @@ export function PrototypeCard({
           />
         </div>
 
-        {showCommentsToggle && (
-          <CommentsEnabledToggle
-            prototypeId={prototype.id}
-            enabled={prototype.commentsEnabled !== false}
-            liveSiteId={
-              publishUsername && prototype.slug
-                ? `~${publishUsername}/${prototype.slug}`
-                : undefined
-            }
-            onUpdated={onRefresh}
-            onHint={setTeamShareHint}
-            onError={setActionError}
-          />
-        )}
-
         {!isOwn && prototype.commentsEnabled === false && (
           <p className="text-xs text-zinc-500">Comments off on the live page</p>
         )}
@@ -492,6 +508,22 @@ export function PrototypeCard({
                 OpenLab id + NetApp password. VPN required.
               </p>
             </div>
+
+            {showCommentsToggle && (
+              <CommentsEnabledToggle
+                prototypeId={prototype.id}
+                enabled={prototype.commentsEnabled !== false}
+                liveSiteId={
+                  isPublished && publishUsername && prototype.slug
+                    ? `~${publishUsername}/${prototype.slug}`
+                    : undefined
+                }
+                onUpdated={onRefresh}
+                onHint={setTeamShareHint}
+                onError={setActionError}
+              />
+            )}
+
             <Button
               className="w-full"
               onClick={openPublishGuide}
@@ -500,6 +532,22 @@ export function PrototypeCard({
               {publishing ? "Publishing…" : isPublished ? "Republish" : "Publish"}
             </Button>
           </div>
+        )}
+
+        {/* Own published cards in Team gallery (no publish chrome) still need the comments switch */}
+        {showCommentsToggle && !showOwnerTools && (
+          <CommentsEnabledToggle
+            prototypeId={prototype.id}
+            enabled={prototype.commentsEnabled !== false}
+            liveSiteId={
+              publishUsername && prototype.slug
+                ? `~${publishUsername}/${prototype.slug}`
+                : undefined
+            }
+            onUpdated={onRefresh}
+            onHint={setTeamShareHint}
+            onError={setActionError}
+          />
         )}
 
         {actionError && <p className="text-xs text-red-300">{actionError}</p>}
@@ -593,6 +641,8 @@ export function PrototypeCard({
         liveUrl={publishedLiveUrl || expectedLiveUrl || liveUrl}
         isRepublish={isPublished}
         error={publishPhase === "confirm" ? actionError : undefined}
+        commentsEnabled={commentsOn}
+        onCommentsEnabledChange={(next) => void setCommentsEnabled(next)}
         onClose={() => {
           if (publishPhase === "publishing") return;
           setPublishGuideOpen(false);

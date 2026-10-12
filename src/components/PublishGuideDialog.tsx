@@ -17,6 +17,8 @@ export function PublishGuideDialog({
   liveUrl,
   isRepublish,
   error,
+  commentsEnabled = true,
+  onCommentsEnabledChange,
   onClose,
   onConfirmPublish,
 }: {
@@ -26,6 +28,8 @@ export function PublishGuideDialog({
   liveUrl: string;
   isRepublish: boolean;
   error?: string;
+  commentsEnabled?: boolean;
+  onCommentsEnabledChange?: (enabled: boolean) => void;
   onClose: () => void;
   onConfirmPublish: () => void;
 }) {
@@ -91,6 +95,32 @@ export function PublishGuideDialog({
               </li>
             </ul>
 
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-[15px] font-medium text-white">Comments on live page</p>
+                <p className="mt-0.5 text-[13px] text-zinc-500">
+                  Turns on the commenter bubble for everyone on the link.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={commentsEnabled}
+                aria-label="Comments on live page"
+                disabled={!onCommentsEnabledChange}
+                onClick={() => onCommentsEnabledChange?.(!commentsEnabled)}
+                className={`relative h-7 w-12 shrink-0 cursor-pointer rounded-full transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:opacity-50 ${
+                  commentsEnabled ? "bg-emerald-400" : "bg-white/20"
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform duration-150 ease-out ${
+                    commentsEnabled ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+
             {error && <p className="text-sm text-red-300">{error}</p>}
 
             <div className="flex justify-between gap-3 pt-1">
@@ -107,6 +137,7 @@ export function PublishGuideDialog({
         {phase === "publishing" && (
           <p className="text-[15px] text-zinc-400">
             Building and uploading “{prototypeName}”. Keep VPN on.
+            {commentsEnabled ? " Comments will be on." : " Comments will stay off."}
           </p>
         )}
 
@@ -122,7 +153,11 @@ export function PublishGuideDialog({
                 {liveUrl}
               </a>
             )}
-            <p className="text-[15px] text-zinc-500">Share that link.</p>
+            <p className="text-[15px] text-zinc-500">
+              {commentsEnabled
+                ? "Share that link. The comment bubble is on for visitors."
+                : "Share that link. Comments are off until you turn them on."}
+            </p>
 
             {error && <p className="text-sm text-red-300">{error}</p>}
 
