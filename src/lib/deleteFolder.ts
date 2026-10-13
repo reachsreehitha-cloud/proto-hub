@@ -46,18 +46,34 @@ export function movePrototypeFolderToTrash(folderPath: string): {
 
   try {
     if (process.platform === "darwin") {
-      // Finder Trash. Recoverable, better UX than rm -rf
-      const escaped = normalized.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-      execFileSync(
-        "osascript",
-        ["-e", `tell application "Finder" to delete (POSIX file "${escaped}")`],
-        { timeout: 30000 },
-      );
+      // Move into ~/.Trash without AppleScript. Avoids “Proto Hub wants to control Finder”
+      // (that prompt was interrupting Delete and causing Failed to fetch).
+      const trash = path.join(home, ".Trash");
+      fs.mkdirSync(trash, { recursive: true });
+      const base = path.basename(normalized);
+      let dest = path.join(trash, base);
+      if (fs.existsSync(dest)) {
+        dest = path.join(trash, `${base}-${Date.now()}`);
+      }
+      fs.renameSync(normalized, dest);
     } else {
       fs.rmSync(normalized, { recursive: true, force: true });
     }
     return { ok: true };
   } catch (err) {
+    // Cross-device rename can fail; fall back to copy-then-remove
+    try {
+      if (process.platform === "darwin") {
+        const trash = path.join(home, ".Trash");
+        fs.mkdirSync(trash, { recursive: true });
+        const dest = path.join(trash, `${path.basename(normalized)}-${Date.now()}`);
+        execFileSync("cp", ["-R", normalized, dest], { timeout: 120000 });
+        fs.rmSync(normalized, { recursive: true, force: true });
+        return { ok: true };
+      }
+    } catch {
+      // fall through
+    }
     return {
       ok: false,
       message: err instanceof Error ? err.message : "Could not move folder to Trash.",
