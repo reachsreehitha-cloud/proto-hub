@@ -4,9 +4,9 @@ Hackathon tool for NetApp UX: create Blueprint prototypes, build in Cursor, publ
 
 ## One command for the team (Team Proto Hub)
 
-Needs macOS, Node 20+, git, and GitHub access to this private repo (ask to be added as a collaborator).
+Needs macOS, Node 20+, and git. The repo is **public** - anyone can install (no collaborator invite).
 
-Paste this in Slack / email (names stay in the message, not inside the command):
+Paste this in Slack / email:
 
 ```bash
 # Team Proto Hub
@@ -60,8 +60,6 @@ npm run dev
 Open [http://localhost:3000](http://localhost:3000).
 
 The Blueprint starter lives in `template/` (including dependencies) so **Create new** works after clone without a separate Hackathon folder.
-
-Private repo: ask the owner to add you under **Settings → Collaborators**.
 
 ## Share a prototype with the team
 

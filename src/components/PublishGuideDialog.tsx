@@ -72,8 +72,8 @@ export function PublishGuideDialog({
           <div className="space-y-5">
             <ul className="space-y-2.5 text-[15px] leading-relaxed text-zinc-400">
               <li>
-                <span className="text-zinc-200">GitHub access</span>
-                {" is required. "}
+                <span className="text-zinc-200">NetApp npm packages</span>
+                {" may need GitHub setup. "}
                 <a
                   className="text-white underline decoration-white/25 underline-offset-4"
                   href={GITHUB_ACCESS_GUIDE}

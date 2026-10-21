@@ -397,7 +397,7 @@ Usage:
   node bin/proto-hub.js --install   # install only, do not launch
   node bin/proto-hub.js --dry-run   # sandbox under ~/ProtoHub-dry-run (safe on your Mac)
 
-Needs: macOS, Node 20+, git, GitHub access to this private repo.
+Needs: macOS, Node 20+, git. Repo is public - no collaborator invite.
 `);
     return;
   }
