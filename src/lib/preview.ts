@@ -15,8 +15,11 @@ export function prototypeFolderPresent(folderPath?: string | null): boolean {
   return fs.existsSync(folderPath) && fs.existsSync(path.join(appDir, "package.json"));
 }
 
+/** Package folder alone is not enough — dist/ must exist (git used to omit it). */
 function blueprintDepsReady(appDir: string): boolean {
-  return fs.existsSync(path.join(appDir, "node_modules", "@netapp", "blueprint"));
+  return fs.existsSync(
+    path.join(appDir, "node_modules", "@netapp", "blueprint", "dist", "index.js"),
+  );
 }
 
 /**

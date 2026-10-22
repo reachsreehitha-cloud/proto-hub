@@ -12,9 +12,13 @@ export interface AutoSetupResult {
   nodeMessage?: string;
 }
 
+/** True when the shipped starter includes a usable Blueprint build (not just package.json). */
 export function templateHasBundledBlueprint(): boolean {
-  return fs.existsSync(
-    path.join(getTemplateAppDir(), "node_modules", "@netapp", "blueprint", "package.json"),
+  const app = getTemplateAppDir();
+  return (
+    fs.existsSync(path.join(app, "node_modules", "@netapp", "blueprint", "dist", "index.js")) &&
+    fs.existsSync(path.join(app, "node_modules", "vite", "bin", "vite.js")) &&
+    fs.existsSync(path.join(app, "node_modules", "vite", "dist", "node", "cli.js"))
   );
 }
 

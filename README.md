@@ -4,7 +4,7 @@ Hackathon tool for NetApp UX: create Blueprint prototypes, build in Cursor, publ
 
 ## One command for the team (Team Proto Hub)
 
-Needs macOS, Node 20+, and git. The repo is **public** - anyone can install (no collaborator invite).
+Needs macOS, Node 20+, and git. The repo is **public** - anyone can install (no collaborator invite). The Blueprint starter ships with a complete `node_modules` (including package `dist/` folders) so Create works without a wipe + `npm install`.
 
 Paste this in Slack / email:
 
@@ -12,6 +12,8 @@ Paste this in Slack / email:
 # Team Proto Hub
 npx --yes github:reachsreehitha-cloud/proto-hub
 ```
+
+If you installed before and Create looked incomplete, re-run that command (or delete `~/ProtoHub` and install again), then Create a new draft.
 
 **Smoke-test on your Mac without touching your real install:**
 

@@ -1,7 +1,9 @@
 # Keep Blueprint starter dependencies in git so Create works offline / without npm auth.
 # Do not ignore node_modules here.
 .DS_Store
-dist/
+# Only ignore the Vite *app* build output — never package dist/ under node_modules
+# (e.g. @netapp/blueprint/dist, vite/dist). Ignoring those broke Create for teammates.
+/blueprint-app/dist/
 .env
 .env.local
 *.log

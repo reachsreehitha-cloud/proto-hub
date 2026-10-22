@@ -297,8 +297,13 @@ function friendlyNpmError(raw: string): { message: string; helpUrl?: string } {
   };
 }
 
+/** Usable Blueprint + Vite tree (package.json without dist/ is treated as incomplete). */
 function blueprintReady(appDir: string): boolean {
-  return fs.existsSync(path.join(appDir, "node_modules", "@netapp", "blueprint"));
+  return (
+    fs.existsSync(path.join(appDir, "node_modules", "@netapp", "blueprint", "dist", "index.js")) &&
+    fs.existsSync(path.join(appDir, "node_modules", "vite", "bin", "vite.js")) &&
+    fs.existsSync(path.join(appDir, "node_modules", "vite", "dist", "node", "cli.js"))
+  );
 }
 
 /** OneDrive / copyFile can flatten .bin symlinks - restore the common ones after scaffold. */
@@ -330,6 +335,15 @@ function repairNpmBinLinks(appDir: string) {
   }
 }
 
+function runNpmInstall(appDir: string, npm: string) {
+  execFileSync(npm, ["install"], {
+    cwd: appDir,
+    stdio: "pipe",
+    timeout: 300000,
+    env: spawnEnv(),
+  });
+}
+
 function installDependencies(dest: string): {
   status: ScaffoldResult["installStatus"];
   message: string;
@@ -357,12 +371,14 @@ function installDependencies(dest: string): {
   }
 
   try {
-    execFileSync(npm, ["install"], {
-      cwd: appDir,
-      stdio: "pipe",
-      timeout: 300000,
-      env: spawnEnv(),
-    });
+    // Incomplete trees (e.g. old installs missing package dist/) need a real install.
+    runNpmInstall(appDir, npm);
+    if (!blueprintReady(appDir)) {
+      // Half-copied node_modules confuse npm — wipe and retry once.
+      const nm = path.join(appDir, "node_modules");
+      if (fs.existsSync(nm)) fs.rmSync(nm, { recursive: true, force: true });
+      runNpmInstall(appDir, npm);
+    }
     if (!blueprintReady(appDir)) {
       return {
         status: "partial",
@@ -370,6 +386,7 @@ function installDependencies(dest: string): {
         helpUrl: NPM_AUTH_GUIDE,
       };
     }
+    repairNpmBinLinks(appDir);
     return { status: "success", message: "Blueprint is installed and ready - start prompting in Cursor." };
   } catch (error) {
     const raw =
