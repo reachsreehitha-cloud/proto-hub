@@ -381,7 +381,7 @@ function launchApp() {
     log("  3. Spotlight - press ⌘Space, type Proto Hub, Enter");
     log("  4. Finder → Applications → Proto Hub");
     log("");
-    log("A window should open now. Closing it keeps Proto Hub running.");
+    log("A window should open now. Closing it quits Proto Hub.");
   }
 }
 

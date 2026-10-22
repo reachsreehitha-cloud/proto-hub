@@ -284,18 +284,10 @@ function createWindow() {
   });
   win.setIgnoreMouseEvents(false);
 
-  win.on("close", (e) => {
-    // Closing the window keeps the app alive in Dock + menu bar
-    if (!app.isQuitting) {
-      e.preventDefault();
-      win.hide();
-      if (Notification.isSupported()) {
-        new Notification({
-          title: "Proto Hub is still running",
-          body: "Click the Proto Hub icon near Wi‑Fi, or Proto Hub in the Dock, to open it again.",
-        }).show();
-      }
-    }
+  win.on("close", () => {
+    // Closing the window quits Proto Hub (menu bar + Dock + local server).
+    app.isQuitting = true;
+    app.quit();
   });
 
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -401,7 +393,7 @@ function notifyReady() {
   if (!Notification.isSupported()) return;
   new Notification({
     title: "Proto Hub is ready",
-    body: "Proto Hub icon near Wi‑Fi, or Proto Hub in the Dock. Spotlight: ⌘Space → Proto Hub",
+    body: "Close the window to quit. Reopen from Dock, Spotlight, or Applications.",
   }).show();
 }
 
@@ -457,6 +449,7 @@ app.on("before-quit", () => {
   }
 });
 
-app.on("window-all-closed", (e) => {
-  e.preventDefault();
+app.on("window-all-closed", () => {
+  app.isQuitting = true;
+  app.quit();
 });

@@ -38,7 +38,7 @@ That will:
 | Finder | `~/Applications` → **Proto Hub** |
 | Menu bar overflow | Click `»` on the right of the menu bar |
 
-No browser. No typing localhost. Right-click the menu-bar icon (or Dock icon) → **Quit Proto Hub** to stop it.
+No browser. No typing localhost. Closing the Proto Hub window quits the app (menu bar icon goes away too).
 
 **Need for Publish:** VPN/Zscaler, NetApp SSO password (not Mac password).
 
