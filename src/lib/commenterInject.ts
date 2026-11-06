@@ -21,8 +21,18 @@ function commenterInternalHeaders(): Record<string, string> {
 function stripCommenterTags(html: string): string {
   return html
     .replace(/<script[^>]*data-ux-commenter[^>]*>\s*<\/script>/gi, "")
+    .replace(/<script[^>]*src=["'][^"']*\/__commenter\/overlay\.js[^"']*["'][^>]*>\s*<\/script>/gi, "")
+    .replace(/<script[^>]*src=["'][^"']*overlay\.js[^"']*["'][^>]*>\s*<\/script>/gi, "")
     .replace(/<script[^>]*src=["'][^"']*widget\.js["'][^>]*>\s*<\/script>/gi, "")
     .replace(/<meta[^>]*name=["']ux-commenter["'][^>]*>/gi, "");
+}
+
+/** Bust caches so Brian’s commenter updates (e.g. @tagging) show after Publish. */
+function overlayScriptSrc(base: string): string {
+  const bust =
+    process.env.COMMENTER_OVERLAY_VERSION?.trim() ||
+    String(Date.now());
+  return `${base}/overlay.js?v=${encodeURIComponent(bust)}`;
 }
 
 /**
@@ -68,22 +78,19 @@ export function injectCommenterScript(
     return { injected: false, reason: "missing commenter URL" };
   }
 
-  // Overlay only loads when meta is on (sitewide Apache inject + local script).
+  // Overlay only loads when meta is on (Apache may also inject; our tag wins via ?v=).
   injectHead(`<meta name="ux-commenter" content="on" ${MARKER} />`);
 
-  // Local commenter has no Apache inject. Ship the overlay script.
-  // On ux.netapp.com Apache already injects /__commenter/overlay.js for /~ paths.
-  const isUxHosted =
-    /ux\.netapp\.com\/__commenter/i.test(base) || /\/__commenter$/i.test(base);
-  let scriptSrc: string | undefined;
-  if (!isUxHosted) {
-    scriptSrc = `${base}/overlay.js`;
-    const tag = `<script ${MARKER} src="${scriptSrc}" defer></script>`;
-    if (/<\/body>/i.test(html)) {
-      html = html.replace(/<\/body>/i, `  ${tag}\n</body>`);
-    } else {
-      html = `${html}\n${tag}\n`;
-    }
+  // Always ship the overlay ourselves with a cache-busting query. Brian’s tagging /
+  // @Writer live in this shared script — not in the prototype bundle. Republish
+  // must refresh the script URL or browsers can keep a stale overlay.
+  // If Apache also injects overlay.js, the second boot no-ops (already booted).
+  const scriptSrc = overlayScriptSrc(base);
+  const tag = `<script ${MARKER} src="${scriptSrc}" defer></script>`;
+  if (/<\/body>/i.test(html)) {
+    html = html.replace(/<\/body>/i, `  ${tag}\n</body>`);
+  } else {
+    html = `${html}\n${tag}\n`;
   }
 
   fs.writeFileSync(indexPath, html, "utf8");
